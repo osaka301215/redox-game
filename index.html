@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>酸化還元ゲーム オンライン</title>
+<style>
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; background-color: #d6ecd2; color: #333; margin: 0; padding: 20px; }
+    .area { border: 2px solid #bdc3c7; padding: 15px; margin: 15px auto; background: white; border-radius: 12px; max-width: 850px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .field-container { display: flex; justify-content: center; align-items: center; gap: 20px; min-height: 120px; }
+    .field-box { flex: 1; border: 1px dashed #ccc; border-radius: 8px; padding: 10px; min-height: 100px; background: #fafafa; }
+    .card {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 50px; height: 70px; border: 2px solid #34495e; margin: 4px;
+        cursor: pointer; background: #fff; border-radius: 6px; font-weight: bold;
+        font-size: 16px; transition: all 0.2s; user-select: none; box-sizing: border-box; vertical-align: middle; color: #333;
+    }
+    .selected { background: #f1c40f !important; border-color: #f39c12 !important; color: #fff !important; }
+    .card-wild { border: 2px dashed #9b59b6 !important; color: #8e44ad !important; background: #f5eef8 !important; }
+    .card-wild.selected { background: #f1c40f !important; border: 2px solid #f39c12 !important; color: #fff !important; transform: scale(1.1); }
+    .card-new { animation: highlight 1s ease-out; }
+    @keyframes highlight { 0% { background: #2ecc71; color: white; transform: scale(1.15); } 100% { background: #fff; } }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; margin: 5px; border: none; border-radius: 5px; background-color: #3498db; color: white; }
+    button:hover { background-color: #2980b9; }
+    button:disabled { background-color: #bdc3c7 !important; cursor: not-allowed; }
+    .btn-draw { background-color: #27ae60; }
+    .btn-draw:hover { background-color: #1e8449; }
+    .btn-pass { background-color: #95a5a6; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 25px; border-radius: 15px; max-width: 500px; text-align: center; color: #333; }
+    .modal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 20px; }
+    .modal-btn { padding: 12px 5px; border: 1px solid #34495e; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; background: #fff; color: #333; }
+    .modal-btn:hover { background: #f1c40f; border-color: #f39c12; }
+    #message { font-size: 17px; color: #e74c3c; min-height: 25px; margin: 10px; font-weight: bold; }
+    #draw-notice { font-size: 14px; color: #27ae60; min-height: 20px; margin: 4px; font-weight: bold; }
+    .active-p { color: #e67e22; font-weight: bold; text-decoration: underline; }
+    .overlay { font-size: 24px; color: white; background: rgba(0,0,0,0.85); padding: 30px; border-radius: 15px; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; box-shadow: 0 0 30px rgba(0,0,0,0.5); display: none; min-width: 300px; }
+    #setup-screen { max-width: 500px; margin: 30px auto; padding: 30px; background: white; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    #lobby-screen { max-width: 500px; margin: 30px auto; padding: 30px; background: white; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    .name-input { padding: 8px; width: 200px; border: 1px solid #ddd; border-radius: 5px; color: #333; font-size: 15px; }
+    #waiting-screen { max-width: 500px; margin: 30px auto; padding: 30px; background: white; border-radius: 15px; }
+    .room-code { font-size: 36px; font-weight: bold; color: #2980b9; letter-spacing: 6px; margin: 15px 0; background: #eaf4fb; padding: 15px; border-radius: 8px; }
+    .player-list-item { padding: 8px 15px; margin: 5px; background: #eafaf1; border-radius: 8px; font-weight: bold; }
+    .my-turn-banner { background: #27ae60; color: white; padding: 8px; border-radius: 8px; margin: 8px auto; max-width: 850px; font-weight: bold; }
+    .not-my-turn-banner { background: #95a5a6; color: white; padding: 8px; border-radius: 8px; margin: 8px auto; max-width: 850px; }
+</style>
+</head>
+<body>
+
+<!-- ① 最初の画面：作る or 参加する -->
+<div id="setup-screen">
+    <h2 style="color:#2c3e50;">🧪 酸化還元ゲーム オンライン</h2>
+    <div style="margin: 20px 0;">
+        <input type="text" id="my-name-input" class="name-input" placeholder="あなたの名前" style="width:250px; font-size:18px; padding:10px;">
+    </div>
+    <button onclick="showCreateRoom()" style="background:#27ae60; width:100%; padding:15px; font-size:18px; margin-bottom:10px;">🏠 ルームを作る</button>
+    <button onclick="showJoinRoom()" style="background:#2980b9; width:100%; padding:15px; font-size:18px;">🚪 ルームに参加する</button>
+    <hr style="margin:20px 0;">
+    <button onclick="document.getElementById('rule-modal').style.display='flex'" style="background:#8e44ad; width:100%; padding:10px; font-size:14px;">📖 ルールを確認する</button>
+</div>
+
+<!-- ② ルーム作成設定 -->
+<div id="create-room-screen" style="display:none;">
+    <div id="setup-screen" style="display:block; max-width:500px; margin:30px auto; padding:30px; background:white; border-radius:15px; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
+        <h2 style="color:#2c3e50;">🏠 ルーム設定</h2>
+        <div style="margin: 12px 0;">
+            <label>最大人数: </label>
+            <select id="player-count-select" style="padding:5px; font-size:16px;">
+                <option value="2">2人</option>
+                <option value="3">3人</option>
+                <option value="4" selected>4人</option>
+                <option value="5">5人</option>
+                <option value="6">6人</option>
+            </select>
+        </div>
+        <div style="margin: 12px 0;">
+            <label>上がり枚数: </label>
+            <select id="win-count-select" style="padding:5px; font-size:16px;">
+                <option value="0">0枚</option>
+                <option value="1">1枚</option>
+                <option value="2" selected>2枚</option>
+                <option value="3">3枚</option>
+                <option value="4">4枚</option>
+            </select>
+            <span style="font-size:13px; color:#888;">以下で上がり</span>
+        </div>
+        <button onclick="createRoom()" style="background:#27ae60; width:100%; padding:15px; font-size:18px; margin-top:15px;">ルームを作成！</button>
+        <button onclick="backToTop()" style="background:#95a5a6; width:100%; padding:10px; font-size:14px; margin-top:8px;">← 戻る</button>
+    </div>
+</div>
+
+<!-- ③ 参加画面 -->
+<div id="join-room-screen" style="display:none; max-width:500px; margin:30px auto; padding:30px; background:white; border-radius:15px; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
+    <h2 style="color:#2c3e50;">🚪 ルームに参加</h2>
+    <p>ルームコードを入力してください</p>
+    <input type="text" id="room-code-input" placeholder="例: ABC123" style="font-size:24px; width:200px; text-align:center; padding:10px; border:2px solid #3498db; border-radius:8px; letter-spacing:4px; text-transform:uppercase;">
+    <br><br>
+    <button onclick="joinRoom()" style="background:#2980b9; width:100%; padding:15px; font-size:18px;">参加する</button>
+    <button onclick="backToTop()" style="background:#95a5a6; width:100%; padding:10px; font-size:14px; margin-top:8px;">← 戻る</button>
+</div>
+
+<!-- ④ 待合室 -->
+<div id="waiting-screen" style="display:none; max-width:500px; margin:30px auto; padding:30px; background:white; border-radius:15px;">
+    <h2>🏠 待合室</h2>
+    <p style="color:#888; font-size:13px;">このコードを仲間に共有してください</p>
+    <div class="room-code" id="room-code-display">------</div>
+    <div id="waiting-players" style="margin: 15px 0;"></div>
+    <div id="waiting-status" style="color:#888; margin:10px 0;"></div>
+    <button id="start-game-btn" onclick="hostStartGame()" style="background:#27ae60; width:100%; padding:15px; font-size:18px; display:none;">ゲーム開始！</button>
+    <p style="font-size:12px; color:#aaa;">※ホスト（ルームを作った人）がゲームを開始します</p>
+</div>
+
+<!-- ルールモーダル -->
+<div id="rule-modal" class="modal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-content" style="max-width:620px; max-height:80vh; overflow-y:auto; text-align:left; font-size:14px;">
+        <h2 style="text-align:center;">📖 ゲームルール</h2>
+        <h3>🎯 目的</h3>
+        <p>手札を<b>指定枚数以下</b>にした順に順位が決まります。</p>
+        <h3>▶ ターンの流れ</h3>
+        <p>① カードを選んで反応物側・生成物側に出す<br>② 出せない場合は「1枚引く」→ 引いても出せなければ「パス」<br>③ 出した後は「ターン終了」で次へ</p>
+        <h3>⚡ イオン化傾向</h3>
+        <p style="text-align:center;"><b>Na &gt; Al &gt; Zn &gt; Fe &gt; H &gt; Cu &gt; Ag</b></p>
+        <p>違反するとターン終了時に4枚ペナルティ</p>
+        <h3>💰 ポイント</h3>
+        <p>反応式完成→4pt／半反応式→2pt／電子枠の値を加算</p>
+        <button onclick="document.getElementById('rule-modal').style.display='none'" style="width:100%; margin-top:15px; background:#27ae60;">閉じる</button>
+    </div>
+</div>
+
+<!-- ワイルドカードモーダル -->
+<div id="wild-modal" class="modal">
+    <div class="modal-content">
+        <h3>★を何に変身させますか？</h3>
+        <div id="modal-options" class="modal-grid"></div>
+        <button id="modal-cancel-btn" style="margin-top:15px; background:#95a5a6; width:100%;">キャンセル</button>
+    </div>
+</div>
+
+<!-- ⑤ ゲーム画面 -->
+<div id="game-area" style="display:none;">
+    <h2>🧪 酸化還元ゲーム オンライン</h2>
+    <div id="turn-banner" class="not-my-turn-banner">接続中...</div>
+    <div id="cap-info" style="font-weight:bold; color:#2980b9; margin-bottom:5px; cursor:pointer;" onclick="toggleCap()" title="クリックで表示/非表示">電子枠：未確定</div>
+    <div id="violation-overlay" class="overlay" style="background:#e74c3c;">!! イオン化傾向に反しています !!<br>ペナルティ：山札から4枚</div>
+    <div id="winner-overlay" class="overlay" style="background:#27ae60; font-size:28px;"><div id="winner-overlay-text"></div></div>
+    <div id="reaction-overlay" class="overlay" style="background:#2980b9; font-size:32px;"><div id="reaction-overlay-text"></div></div>
+    <div id="result-overlay" class="overlay" style="font-size:14px; max-width:480px; max-height:80vh; overflow-y:auto; padding:20px;"><div id="result-content"></div><br><button onclick="location.reload()" style="width:100%;">もう一度</button></div>
+    <div class="area">
+        <div class="field-container">
+            <div class="field-box"><div><strong>反応物 (Left)</strong></div><div id="left"></div></div>
+            <div style="font-size:32px">→</div>
+            <div class="field-box"><div><strong>生成物 (Right)</strong></div><div id="right"></div></div>
+        </div>
+    </div>
+    <div id="controls"></div>
+    <div class="area"><h3 id="hand-title">手札</h3><div id="hand"></div></div>
+    <div id="draw-notice"></div>
+    <p id="info"></p>
+    <div id="message"></div>
+    <div style="text-align:center; margin-top:20px;">
+        <button onclick="showForceEndConfirm()" style="background:#c0392b; font-size:13px; padding:6px 18px;">⏹ 強制終了</button>
+    </div>
+</div>
+
+<!-- 強制終了確認 -->
+<div id="force-end-modal" class="modal">
+    <div class="modal-content" style="text-align:center;">
+        <h3>ゲームを終了しますか？</h3>
+        <p style="color:#888; font-size:13px;">現時点の手札枚数で順位を決定します</p>
+        <div style="margin-top:20px; display:flex; gap:10px; justify-content:center;">
+            <button onclick="forceEnd()" style="background:#c0392b; padding:12px 30px; font-size:16px;">終了する</button>
+            <button onclick="document.getElementById('force-end-modal').style.display='none'" style="background:#95a5a6; padding:12px 30px; font-size:16px;">キャンセル</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, update, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ===== Firebase設定 =====
+const firebaseConfig = {
+    apiKey: "AIzaSyC0xwTlnAmvoezp5WpqcY5ihUbatYloxUE",
+    authDomain: "redoxgame1-b5bf0.firebaseapp.com",
+    databaseURL: "https://redoxgame1-b5bf0-default-rtdb.firebaseio.com",
+    projectId: "redoxgame1-b5bf0",
+    storageBucket: "redoxgame1-b5bf0.firebasestorage.app",
+    messagingSenderId: "250365886256",
+    appId: "1:250365886256:web:7898dfb65c68e36cca52f5"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// ===== ローカル状態 =====
+var myName = "";
+var myIndex = -1;
+var roomId = "";
+var isHost = false;
+var winCount = 2;
+
+// ゲーム状態（Firebaseと同期）
+var deck = [], players = [], playerNames = [], current = 0, selected = [];
+var fieldLeft = [], fieldRight = [];
+var lastPlayerPlayed = null, noPlayCount = 0, isFirstTurn = true, playedThisTurn = false;
+var totalReactions = 0, totalMistakes = 0, winners = [];
+var parentElement = "", reactionCap = 0, drawnThisTurn = false;
+var playerPoints = [], playerFullReactions = [], playerHalfReactions = [], playerElecPoints = [];
+var handSorted = false, newCardIndex = -1, capVisible = false;
+
+var ionizationSeries = ["Na","Al","Zn","Fe","H","Cu","Ag"];
+var cardTypes = ["Na","Na+","Al","Al3+","Zn","Zn2+","Cu","Cu2+","Ag","Ag+","Fe","Fe2+","Fe3+","H+","H2","e-"];
+
+// ===== 画面切り替え =====
+function hideAll() {
+    ["setup-screen","create-room-screen","join-room-screen","waiting-screen","game-area"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = "none";
+    });
+}
+window.backToTop = function() { hideAll(); document.getElementById("setup-screen").style.display = "block"; };
+window.showCreateRoom = function() {
+    myName = document.getElementById("my-name-input").value.trim();
+    if (!myName) { alert("名前を入力してください"); return; }
+    hideAll(); document.getElementById("create-room-screen").style.display = "block";
+};
+window.showJoinRoom = function() {
+    myName = document.getElementById("my-name-input").value.trim();
+    if (!myName) { alert("名前を入力してください"); return; }
+    hideAll(); document.getElementById("join-room-screen").style.display = "block";
+};
+
+// ===== ルーム作成 =====
+window.createRoom = async function() {
+    var maxPlayers = parseInt(document.getElementById("player-count-select").value);
+    winCount = parseInt(document.getElementById("win-count-select").value);
+    roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    isHost = true; myIndex = 0;
+    await set(ref(db, "rooms/" + roomId), {
+        status: "waiting",
+        host: myName,
+        maxPlayers: maxPlayers,
+        winCount: winCount,
+        players: [myName],
+        gameState: null
+    });
+    hideAll();
+    document.getElementById("waiting-screen").style.display = "block";
+    document.getElementById("room-code-display").textContent = roomId;
+    document.getElementById("start-game-btn").style.display = "block";
+    listenWaiting();
+};
+
+// ===== ルーム参加 =====
+window.joinRoom = async function() {
+    var code = document.getElementById("room-code-input").value.trim().toUpperCase();
+    if (!code) { alert("ルームコードを入力してください"); return; }
+    var snap = await get(ref(db, "rooms/" + code));
+    if (!snap.exists()) { alert("ルームが見つかりません"); return; }
+    var room = snap.val();
+    if (room.status !== "waiting") { alert("このルームはすでにゲームが始まっています"); return; }
+    if (room.players && room.players.length >= room.maxPlayers) { alert("ルームが満員です"); return; }
+    roomId = code;
+    isHost = false;
+    winCount = room.winCount;
+    var newPlayers = room.players ? room.players.concat([myName]) : [myName];
+    myIndex = newPlayers.length - 1;
+    await update(ref(db, "rooms/" + roomId), { players: newPlayers });
+    hideAll();
+    document.getElementById("waiting-screen").style.display = "block";
+    document.getElementById("room-code-display").textContent = roomId;
+    listenWaiting();
+};
+
+// ===== 待合室監視 =====
+function listenWaiting() {
+    onValue(ref(db, "rooms/" + roomId), function(snap) {
+        if (!snap.exists()) return;
+        var room = snap.val();
+        var pl = room.players || [];
+        var html = "";
+        pl.forEach(function(name, i) {
+            var tag = (i === 0) ? " 👑" : "";
+            html += '<div class="player-list-item">' + name + tag + '</div>';
+        });
+        document.getElementById("waiting-players").innerHTML = html;
+        document.getElementById("waiting-status").textContent = pl.length + " / " + room.maxPlayers + " 人参加中";
+        // 自分のindexを更新（参加者が増えた場合）
+        myIndex = pl.indexOf(myName);
+        // ゲーム開始検知
+        if (room.status === "playing" && room.gameState) {
+            startLocalGame(room.gameState, room.players, room.winCount);
+        }
+    });
+}
+
+// ===== ホストがゲーム開始 =====
+window.hostStartGame = async function() {
+    var snap = await get(ref(db, "rooms/" + roomId));
+    var room = snap.val();
+    var pl = room.players || [];
+    if (pl.length < 2) { alert("2人以上必要です"); return; }
+    // デッキ生成・配布
+    var initState = buildInitialState(pl, room.winCount);
+    await update(ref(db, "rooms/" + roomId), { status: "playing", gameState: initState, players: pl });
+};
+
+function buildInitialState(pl, wc) {
+    var d = [];
+    var data = [["Na",8],["Na+",8],["Al",8],["Al3+",8],["Zn",8],["Zn2+",8],["Cu",8],["Cu2+",8],["Ag",8],["Ag+",8],["Fe",8],["Fe2+",4],["Fe3+",4],["H+",8],["H2",4]];
+    data.forEach(function(x){ for(var i=0;i<x[1];i++) d.push(x[0]); });
+    for(var i=0;i<15;i++) d.push("e-");
+    for(var i=0;i<4;i++) d.push("★");
+    d.sort(function(){ return Math.random()-0.5; });
+    var hands = [];
+    for(var i=0;i<pl.length;i++){
+        hands.push([]);
+        var rej=[];
+        while(hands[i].length<10&&d.length>0){
+            var c=d.pop();
+            var cnt=0; for(var k=0;k<hands[i].length;k++) if(hands[i][k]===c) cnt++;
+            if(c!=="e-"&&c!=="★"&&cnt>=2) rej.push(c);
+            else hands[i].push(c);
+        }
+        d=d.concat(rej); d.sort(function(){return Math.random()-0.5;});
+    }
+    return {
+        deck: d, players: hands, current: 0,
+        fieldLeft: [], fieldRight: [],
+        lastPlayerPlayed: null, noPlayCount: 0, isFirstTurn: true, playedThisTurn: false,
+        drawnThisTurn: false, parentElement: "", reactionCap: 0,
+        totalReactions: 0, totalMistakes: 0, winners: [],
+        playerPoints: pl.map(function(){return 0;}),
+        playerFullReactions: pl.map(function(){return 0;}),
+        playerHalfReactions: pl.map(function(){return 0;}),
+        playerElecPoints: pl.map(function(){return 0;}),
+        winCount: wc,
+        log: ""
+    };
+}
+
+// ===== ローカルゲーム開始（Firebase状態を読み込む）=====
+function startLocalGame(gs, pl, wc) {
+    // 既にgame-areaが表示されていたら無視（重複起動防止）
+    if (document.getElementById("game-area").style.display === "block" && playerNames.length > 0) return;
+    playerNames = pl;
+    winCount = wc || 2;
+    loadGameState(gs);
+    hideAll();
+    document.getElementById("game-area").style.display = "block";
+    // 以降はFirebaseをリッスンして状態を同期
+    listenGameState();
+}
+
+function loadGameState(gs) {
+    deck = gs.deck || [];
+    players = gs.players || [];
+    current = gs.current || 0;
+    fieldLeft = gs.fieldLeft || [];
+    fieldRight = gs.fieldRight || [];
+    lastPlayerPlayed = gs.lastPlayerPlayed !== undefined ? gs.lastPlayerPlayed : null;
+    noPlayCount = gs.noPlayCount || 0;
+    isFirstTurn = gs.isFirstTurn !== undefined ? gs.isFirstTurn : true;
+    playedThisTurn = gs.playedThisTurn || false;
+    drawnThisTurn = gs.drawnThisTurn || false;
+    parentElement = gs.parentElement || "";
+    reactionCap = gs.reactionCap || 0;
+    totalReactions = gs.totalReactions || 0;
+    totalMistakes = gs.totalMistakes || 0;
+    winners = gs.winners || [];
+    playerPoints = gs.playerPoints || playerNames.map(function(){return 0;});
+    playerFullReactions = gs.playerFullReactions || playerNames.map(function(){return 0;});
+    playerHalfReactions = gs.playerHalfReactions || playerNames.map(function(){return 0;});
+    playerElecPoints = gs.playerElecPoints || playerNames.map(function(){return 0;});
+    winCount = gs.winCount || winCount;
+}
+
+function getGameState() {
+    return {
+        deck: deck, players: players, current: current,
+        fieldLeft: fieldLeft, fieldRight: fieldRight,
+        lastPlayerPlayed: lastPlayerPlayed, noPlayCount: noPlayCount,
+        isFirstTurn: isFirstTurn, playedThisTurn: playedThisTurn,
+        drawnThisTurn: drawnThisTurn, parentElement: parentElement,
+        reactionCap: reactionCap, totalReactions: totalReactions,
+        totalMistakes: totalMistakes, winners: winners,
+        playerPoints: playerPoints, playerFullReactions: playerFullReactions,
+        playerHalfReactions: playerHalfReactions, playerElecPoints: playerElecPoints,
+        winCount: winCount, log: ""
+    };
+}
+
+async function pushState() {
+    await update(ref(db, "rooms/" + roomId), { gameState: getGameState() });
+}
+
+// ===== Firebase状態監視 =====
+var listeningGame = false;
+function listenGameState() {
+    if (listeningGame) return;
+    listeningGame = true;
+    onValue(ref(db, "rooms/" + roomId + "/gameState"), function(snap) {
+        if (!snap.exists()) return;
+        var gs = snap.val();
+        loadGameState(gs);
+        renderAll();
+    });
+}
+
+// ===== ゲームロジック（オフライン版と同じ）=====
+function format(c) {
+    if (c === "★") return "★";
+    return c.replace("3+","³⁺").replace("2+","²⁺").replace("+","⁺").replace("2","₂").replace("-","⁻");
+}
+
+function parse(card, ctx) {
+    ctx = ctx || [];
+    if (card === "e-") return {elem:"e",vPerAtom:1,charge:-1,isIon:false,atoms:0};
+    var m = card.match(/^([A-Z][a-z]?)([0-9]*)(\+)?$/);
+    if (!m) return {elem:"?",vPerAtom:1,charge:0,isIon:false,atoms:1};
+    var e=m[1], n=m[2]?parseInt(m[2]):1, isIon=(m[3]==="+");
+    var vPerA=1;
+    if(e==="Al") vPerA=3;
+    else if(e==="Fe"){
+        if(card.indexOf("3+")!==-1) vPerA=3;
+        else if(card.indexOf("2+")!==-1) vPerA=2;
+        else vPerA=0;
+    } else if(e==="Zn"||e==="Cu") vPerA=2;
+    var atoms=(e==="H"&&n===2)?2:1;
+    return {elem:e,vPerAtom:vPerA,charge:isIon?(m[2]?n:1):0,isIon:isIon,atoms:atoms};
+}
+
+function getFeValence(extra){
+    extra=extra||[];
+    var all=fieldLeft.concat(fieldRight,extra);
+    var h2=all.indexOf("Fe2+")!==-1, h3=all.indexOf("Fe3+")!==-1;
+    if(h2&&!h3) return 2; if(h3&&!h2) return 3; if(h2&&h3) return 2; return 0;
+}
+function getVPerAtom(card,extra){
+    var p=parse(card,extra);
+    if(p.elem==="Fe"&&!p.isIon) return getFeValence(extra);
+    return p.vPerAtom;
+}
+
+function msg(t,isFlow){
+    var d=document.getElementById("message");
+    d.textContent=t; d.style.color=isFlow?"#d35400":"#e74c3c";
+}
+function setNotice(t){ document.getElementById("draw-notice").textContent=t; }
+
+function isMyTurn(){ return myIndex===current; }
+
+function getWildChoice(){
+    return new Promise(function(resolve){
+        var modal=document.getElementById("wild-modal");
+        var opts=document.getElementById("modal-options");
+        opts.innerHTML="";
+        cardTypes.forEach(function(type){
+            var btn=document.createElement("button");
+            btn.className="modal-btn"; btn.textContent=format(type);
+            btn.onclick=function(){ modal.style.display="none"; resolve(type); };
+            opts.appendChild(btn);
+        });
+        document.getElementById("modal-cancel-btn").onclick=function(){ modal.style.display="none"; resolve(null); };
+        modal.style.display="flex";
+    });
+}
+
+window.drawOne = function(){
+    if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
+    if(drawnThisTurn){ msg("このターンはすでに引いています。"); return; }
+    drawnThisTurn=true;
+    if(deck.length===0){ msg("山札がありません。パスしてください。"); renderAll(); return; }
+    var card=deck.pop();
+    players[myIndex].push(card);
+    newCardIndex=players[myIndex].length-1;
+    setNotice("📥 「"+format(card)+"」を引きました。");
+    msg(""); pushState(); renderAll();
+};
+
+window.passTurn = function(){
+    if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
+    noPlayCount++; playedThisTurn=false; drawnThisTurn=false; setNotice("");
+    checkFlowCondition();
+};
+
+function checkFlowCondition(){
+    if(lastPlayerPlayed===null||reactionCap===0){ nextPlayer(); return; }
+    var activeCount=0;
+    for(var i=0;i<playerNames.length;i++) if(winners.indexOf(i)===-1) activeCount++;
+    if(noPlayCount>=activeCount-1){
+        if(deck.length>0) players[lastPlayerPlayed].push(deck.pop());
+        msg("場が流れました。",true);
+        pushState();
+        setTimeout(function(){ clearField(); nextPlayer(); },2000);
+    } else { nextPlayer(); }
+}
+
+window.play = async function(side){
+    if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
+    if(selected.length===0) return;
+
+    var transformedCards=[];
+    for(var i=0;i<selected.length;i++){
+        var card=players[myIndex][selected[i]];
+        if(card==="★"){
+            var choice=await getWildChoice();
+            if(choice===null){ selected=[]; renderAll(); return; }
+            transformedCards.push(choice);
+        } else transformedCards.push(card);
+    }
+
+    var targetField=(side==="left")?fieldLeft:fieldRight;
+    var allField=fieldLeft.concat(fieldRight);
+
+    if(isFirstTurn){
+        if(transformedCards.indexOf("e-")!==-1){ msg("親は電子を出せません。"); return; }
+        for(var i=0;i<transformedCards.length;i++){
+            var pc=parse(transformedCards[i]);
+            if(pc.elem==="Fe"&&!pc.isIon){ msg("親にFe単体は出せません。"); return; }
+        }
+        var hpf=0; for(var i=0;i<transformedCards.length;i++) if(transformedCards[i]==="H+") hpf++;
+        if(hpf%2!==0){ msg("禁止：H⁺は2枚セットで出してください。"); return; }
+        var p0=parse(transformedCards[0],transformedCards), ok=true;
+        for(var i=0;i<transformedCards.length;i++){
+            var p=parse(transformedCards[i]);
+            if(p.elem!==p0.elem||p.isIon!==p0.isIon){ ok=false; break; }
+        }
+        if(!ok){ msg("親は1種類の物質しか出せません。"); return; }
+        parentElement=p0.elem; reactionCap=0;
+        for(var i=0;i<transformedCards.length;i++){
+            var p=parse(transformedCards[i],transformedCards);
+            var v=getVPerAtom(transformedCards[i],transformedCards);
+            if(v===0){ msg("Fe単体を親で出す場合はFeイオンと一緒に出してください。"); return; }
+            reactionCap+=p.atoms*v;
+        }
+    } else {
+        var pElemSet={};
+        for(var i=0;i<transformedCards.length;i++){ var p=parse(transformedCards[i]); if(p.elem!=="e") pElemSet[p.elem]=true; }
+        var fElemSet={};
+        for(var i=0;i<allField.length;i++){ var p=parse(allField[i]); if(p.elem!=="e") fElemSet[p.elem]=true; }
+        var totalElemKeys=Object.keys(Object.assign({},fElemSet,pElemSet));
+        var hasEf=allField.indexOf("e-")!==-1, hasEp=transformedCards.indexOf("e-")!==-1;
+        if((hasEf||hasEp)&&totalElemKeys.length>1){ msg("禁止：電子がある時は元素1種のみ！"); return; }
+        var sideCards=targetField.concat(transformedCards);
+        var sideHasE=sideCards.indexOf("e-")!==-1, sideHasSolid=false;
+        for(var i=0;i<sideCards.length;i++){ var p=parse(sideCards[i]); if(p.elem!=="e"&&!p.isIon){sideHasSolid=true;break;} }
+        if(sideHasE&&sideHasSolid){ msg("禁止：単体側には電子を置けません。"); return; }
+        var parentIsIon=false;
+        for(var i=0;i<allField.length;i++){ var p=parse(allField[i]); if(p.elem===parentElement&&p.isIon){parentIsIon=true;break;} }
+        function isOpp(card){
+            var p=parse(card);
+            if(p.elem!==parentElement) return false;
+            if(p.isIon!==parentIsIon) return true;
+            if(p.elem==="Fe"&&p.isIon&&parentIsIon){
+                var pc2="";
+                for(var j=0;j<allField.length;j++){ var fp=parse(allField[j]); if(fp.elem==="Fe"&&fp.isIon){pc2=allField[j];break;} }
+                if((pc2==="Fe2+"&&card==="Fe3+")||(pc2==="Fe3+"&&card==="Fe2+")) return true;
+            }
+            return false;
+        }
+        var hasOpp=false; for(var i=0;i<transformedCards.length;i++) if(isOpp(transformedCards[i])){hasOpp=true;break;}
+        var alreadyOpp=false; for(var i=0;i<allField.length;i++) if(isOpp(allField[i])){alreadyOpp=true;break;}
+        if(!alreadyOpp&&!hasOpp){ msg("まず親の相方("+parentElement+")を出す必要があります。"); return; }
+        if(totalElemKeys.length>2){ msg("禁止：元素は最大2種類まで。"); return; }
+        var solidElems={},ionElems={};
+        for(var i=0;i<sideCards.length;i++){
+            if(sideCards[i]==="e-") continue;
+            var p=parse(sideCards[i]);
+            if(!p.isIon) solidElems[p.elem]=true; else ionElems[p.elem]=true;
+        }
+        if(Object.keys(solidElems).length>1){ msg("禁止：単体は一種類まで。"); return; }
+        if(Object.keys(ionElems).length>1){ msg("禁止：イオンは一種類まで。"); return; }
+        var sHasFe2=sideCards.indexOf("Fe2+")!==-1, sHasFe3=sideCards.indexOf("Fe3+")!==-1;
+        if(sHasFe2&&sHasFe3){ msg("禁止：Fe²⁺とFe³⁺は同じ側に混在できません。"); return; }
+        var isFeIonSwap=(function(){
+            var lf2=fieldLeft.indexOf("Fe2+")!==-1,lf3=fieldLeft.indexOf("Fe3+")!==-1;
+            var rf2=fieldRight.indexOf("Fe2+")!==-1,rf3=fieldRight.indexOf("Fe3+")!==-1;
+            var pf2=transformedCards.indexOf("Fe2+")!==-1,pf3=transformedCards.indexOf("Fe3+")!==-1;
+            return (lf2&&(rf3||pf3))||(lf3&&(rf2||pf2))||(rf2&&pf3)||(rf3&&pf2);
+        })();
+        var pElems=Object.keys(pElemSet);
+        for(var ei=0;ei<pElems.length;ei++){
+            var el=pElems[ei];
+            var info=null; for(var i=0;i<transformedCards.length;i++){var p=parse(transformedCards[i]);if(p.elem===el){info=p;break;}}
+            if(el==="Fe"&&isFeIonSwap) continue;
+            var vpa=(info.elem==="Fe"&&!info.isIon)?getFeValence(transformedCards):info.vPerAtom;
+            if(vpa===0){ msg("Fe単体を出すにはまず場にFeイオンが必要です。"); return; }
+            if(reactionCap%vpa!==0){ msg("禁止：枠を割り切れません。"); return; }
+            var maxAtoms=reactionCap/vpa;
+            var curAtoms=0; for(var i=0;i<targetField.length;i++){var p=parse(targetField[i]);if(p.elem===el)curAtoms+=p.atoms;}
+            var addAtoms=0; for(var i=0;i<transformedCards.length;i++){var p=parse(transformedCards[i]);if(p.elem===el)addAtoms+=p.atoms;}
+            if(curAtoms+addAtoms>maxAtoms){ msg("禁止：原子数が多すぎます。"); return; }
+        }
+        var hp2=0; for(var i=0;i<transformedCards.length;i++) if(transformedCards[i]==="H+") hp2++;
+        if(hp2%2!==0){ msg("禁止：H⁺は2枚セットで出してください。"); return; }
+        var curE=0;
+        for(var i=0;i<targetField.length;i++) if(targetField[i]==="e-") curE++;
+        for(var i=0;i<transformedCards.length;i++) if(transformedCards[i]==="e-") curE++;
+        if(curE>reactionCap){ msg("電子は枠("+reactionCap+")を超えて出せません。"); return; }
+    }
+
+    selected.sort(function(a,b){return b-a;});
+    for(var i=0;i<selected.length;i++){
+        var handIdx=selected[i];
+        var cToField=transformedCards[transformedCards.length-1-i];
+        players[myIndex].splice(handIdx,1);
+        targetField.push(cToField);
+    }
+    selected=[]; playedThisTurn=true; drawnThisTurn=false; noPlayCount=0; setNotice("");
+    lastPlayerPlayed=myIndex;
+
+    if(players[myIndex].length<=winCount&&winners.indexOf(myIndex)===-1){
+        winners.push(myIndex);
+        var rank=winners.length;
+        var wo=document.getElementById("winner-overlay");
+        document.getElementById("winner-overlay-text").innerHTML=rank+"位上がり！🎊<br>"+myName;
+        wo.style.display="block";
+        setTimeout(function(){wo.style.display="none";},2000);
+        msg(myName+" が"+rank+"位で上がりました！");
+    }
+
+    if(isFirstTurn){
+        if(checkViolation()) { triggerPenalty(); return; }
+        else { isFirstTurn=false; playedThisTurn=false; pushState(); nextPlayer(); }
+    } else {
+        checkComplete();
+        await pushState();
+        renderAll();
+    }
+};
+
+window.endTurn = function(){
+    if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
+    if(playedThisTurn&&checkViolation()){ triggerPenalty(); return; }
+    playedThisTurn=false; drawnThisTurn=false; setNotice("");
+    nextPlayer();
+};
+
+function nextPlayer(){
+    drawnThisTurn=false; newCardIndex=-1; handSorted=false; setNotice("");
+    if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
+    do{ current=(current+1)%playerNames.length; } while(winners.indexOf(current)!==-1);
+    pushState();
+}
+
+function clearField(){
+    fieldLeft=[]; fieldRight=[]; reactionCap=0; parentElement="";
+    msg(""); setNotice("");
+    noPlayCount=0; lastPlayerPlayed=null; isFirstTurn=true;
+    playedThisTurn=false; drawnThisTurn=false;
+    pushState();
+}
+
+function checkViolation(){
+    if(fieldLeft.length===0||fieldRight.length===0) return false;
+    var ms=["Na","Al","Zn","Fe","H","Cu","Ag"];
+    function getSolids(f){ var s=[]; for(var i=0;i<f.length;i++){var p=parse(f[i]);if(!p.isIon&&ms.indexOf(p.elem)!==-1)s.push(p.elem);} return s; }
+    function getIons(f){ var s=[]; for(var i=0;i<f.length;i++){var p=parse(f[i]);if(p.isIon&&ionizationSeries.indexOf(p.elem)!==-1)s.push(p.elem);} return s; }
+    var LS=getSolids(fieldLeft),LI=getIons(fieldLeft);
+    for(var i=0;i<LI.length;i++){ var ir=ionizationSeries.indexOf(LI[i]); for(var j=0;j<LS.length;j++){ if(LI[i]===LS[j]) continue; var sr=ionizationSeries.indexOf(LS[j]); if(ir<sr) return true; } }
+    var RS=getSolids(fieldRight),RI=getIons(fieldRight);
+    for(var i=0;i<RI.length;i++){ var ir=ionizationSeries.indexOf(RI[i]); for(var j=0;j<RS.length;j++){ if(RI[i]===RS[j]) continue; var sr=ionizationSeries.indexOf(RS[j]); if(ir>sr) return true; } }
+    return false;
+}
+
+function triggerPenalty(){
+    totalMistakes++;
+    var ov=document.getElementById("violation-overlay"); ov.style.display="block";
+    for(var i=0;i<4;i++) if(deck.length>0) players[current].push(deck.pop());
+    setTimeout(function(){ ov.style.display="none"; clearField(); nextPlayer(); },2000);
+}
+
+function checkComplete(){
+    if(fieldLeft.length===0||fieldRight.length===0) return;
+    function tally(arr){ var res={charge:0,elems:{}}; for(var i=0;i<arr.length;i++){var p=parse(arr[i]);res.charge+=p.charge;if(p.elem!=="e")res.elems[p.elem]=(res.elems[p.elem]||0)+p.atoms;} return res; }
+    var L=tally(fieldLeft),R=tally(fieldRight);
+    var keys=Object.keys(L.elems).concat(Object.keys(R.elems));
+    var match=(L.charge===R.charge);
+    if(match) for(var i=0;i<keys.length;i++){var k=keys[i];if((L.elems[k]||0)!==(R.elems[k]||0)){match=false;break;}}
+    if(match){
+        if(checkViolation()){triggerPenalty();return;}
+        var elemCount=Object.keys(L.elems).length;
+        var basePoint=(elemCount>=2)?4:2;
+        var elecPoint=reactionCap;
+        var gainedPoint=basePoint+elecPoint;
+        if(lastPlayerPlayed!==null){
+            playerPoints[lastPlayerPlayed]+=gainedPoint;
+            if(elemCount>=2) playerFullReactions[lastPlayerPlayed]++;
+            else playerHalfReactions[lastPlayerPlayed]++;
+            playerElecPoints[lastPlayerPlayed]+=elecPoint;
+            msg("🎉 反応成立！ +"+gainedPoint+"pt ("+(elemCount>=2?"反応式":"半反応式")+" "+basePoint+"pt + 電子"+elecPoint+"pt)",true);
+            var ro=document.getElementById("reaction-overlay");
+            document.getElementById("reaction-overlay-text").innerHTML="🎉 反応成立！<br>+"+gainedPoint+"pt";
+            ro.style.display="block";
+            setTimeout(function(){ro.style.display="none";},2000);
+        }
+        totalReactions++;
+        setTimeout(clearField,2500);
+    }
+}
+
+// ===== レンダリング =====
+window.toggleCap = function(){
+    capVisible=!capVisible; updateCapInfo();
+};
+function updateCapInfo(){
+    var el=document.getElementById("cap-info"); if(!el) return;
+    if(!capVisible){ el.textContent="電子枠：🔒 (クリックで表示)"; el.style.color="#aaa"; }
+    else{ el.textContent=reactionCap>0?"電子枠："+reactionCap+" e⁻ ("+parentElement+")":"電子枠：未確定"; el.style.color="#2980b9"; }
+}
+
+function renderAll(){
+    if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
+
+    // ターンバナー
+    var banner=document.getElementById("turn-banner");
+    if(isMyTurn()){
+        banner.className="my-turn-banner";
+        banner.textContent="🟢 あなたのターンです！";
+    } else {
+        banner.className="not-my-turn-banner";
+        banner.textContent="⏳ "+playerNames[current]+" のターン...";
+    }
+
+    // フィールド再描画
+    var leftDiv=document.getElementById("left"); leftDiv.innerHTML="";
+    for(var i=0;i<fieldLeft.length;i++){
+        var d=document.createElement("div"); d.className="card"; d.textContent=format(fieldLeft[i]); leftDiv.appendChild(d);
+    }
+    var rightDiv=document.getElementById("right"); rightDiv.innerHTML="";
+    for(var i=0;i<fieldRight.length;i++){
+        var d=document.createElement("div"); d.className="card"; d.textContent=format(fieldRight[i]); rightDiv.appendChild(d);
+    }
+
+    // 手札（自分のだけ）
+    var handDiv=document.getElementById("hand"); handDiv.innerHTML="";
+    if(myIndex>=0&&players[myIndex]){
+        var myHand=players[myIndex];
+        var cardOrder=[]; for(var i=0;i<myHand.length;i++) cardOrder.push(i);
+        if(handSorted){
+            var sortKeys=["Na","Na+","Al","Al3+","Zn","Zn2+","Fe","Fe2+","Fe3+","Cu","Cu2+","Ag","Ag+","H+","H2","e-","★"];
+            cardOrder.sort(function(a,b){
+                var ai=sortKeys.indexOf(myHand[a]); var bi=sortKeys.indexOf(myHand[b]);
+                if(ai===-1)ai=99; if(bi===-1)bi=99; return ai-bi;
+            });
+        }
+        for(var ci=0;ci<cardOrder.length;ci++){
+            (function(idx){
+                var c=myHand[idx];
+                var d=document.createElement("div");
+                var cls="card";
+                if(selected.indexOf(idx)!==-1) cls+=" selected";
+                if(c==="★") cls+=" card-wild";
+                if(idx===newCardIndex) cls+=" card-new";
+                d.className=cls; d.textContent=format(c);
+                d.onclick=function(){
+                    if(!isMyTurn()) return;
+                    var pos=selected.indexOf(idx);
+                    if(pos!==-1) selected.splice(pos,1); else selected.push(idx);
+                    msg(""); renderAll();
+                };
+                handDiv.appendChild(d);
+            })(cardOrder[ci]);
+        }
+    }
+
+    // コントロール
+    var ctrl=document.getElementById("controls"); ctrl.innerHTML="";
+    if(isMyTurn()){
+        ["left","right"].forEach(function(side){
+            var btn=document.createElement("button");
+            btn.textContent=(side==="left"?"反応物側":"生成物側")+(isFirstTurn?"に出して開始":"に出す");
+            btn.onclick=function(){ window.play(side); }; ctrl.appendChild(btn);
+        });
+        if(!isFirstTurn){
+            if(playedThisTurn){
+                var endBtn=document.createElement("button"); endBtn.textContent="ターン終了";
+                endBtn.onclick=window.endTurn; ctrl.appendChild(endBtn);
+            } else if(!drawnThisTurn){
+                var drawBtn=document.createElement("button"); drawBtn.className="btn-draw";
+                drawBtn.textContent="🃏 1枚引く"; drawBtn.onclick=window.drawOne; ctrl.appendChild(drawBtn);
+            } else {
+                var passBtn=document.createElement("button"); passBtn.className="btn-pass";
+                passBtn.textContent="パス（出せない）"; passBtn.onclick=window.passTurn; ctrl.appendChild(passBtn);
+            }
+        }
+        var sortBtn=document.createElement("button");
+        sortBtn.textContent=handSorted?"🔀 元の順に戻す":"🔤 並び替え";
+        sortBtn.style.backgroundColor="#8e44ad"; sortBtn.style.fontSize="13px"; sortBtn.style.padding="6px 12px";
+        sortBtn.onclick=function(){handSorted=!handSorted;selected=[];renderAll();}; ctrl.appendChild(sortBtn);
+    }
+
+    updateCapInfo();
+    document.getElementById("hand-title").textContent="手札 (残り"+winCount+"枚以下で上がり) 　自分: "+(players[myIndex]?players[myIndex].length:0)+"枚";
+
+    var info="山札: "+deck.length+"枚 | ";
+    for(var i=0;i<playerNames.length;i++){
+        var cls=(i===current)?"active-p":"";
+        var label=(winners.indexOf(i)!==-1)?"(済)":"("+( players[i]?players[i].length:0)+")";
+        info+='<span class="'+cls+'">'+playerNames[i]+label+'</span> ';
+    }
+    document.getElementById("info").innerHTML=info;
+}
+
+function showFinal(){
+    for(var i=0;i<playerNames.length;i++) if(winners.indexOf(i)===-1) winners.push(i);
+    var html="<b>🏆 最終順位</b><br><br>";
+    for(var i=0;i<winners.length;i++){
+        var cc=players[winners[i]]?players[winners[i]].length:0;
+        html+="<b>"+(i+1)+"位</b>: "+playerNames[winners[i]]+"　<b>"+playerPoints[winners[i]]+"pt</b>　残"+cc+"枚<br>";
+    }
+    var totalPt=0; for(var i=0;i<playerPoints.length;i++) totalPt+=playerPoints[i];
+    html+="<br>💰 <b>獲得ポイント合計："+totalPt+"pt</b><br>";
+    html+="<br><b>📊 ポイント内訳</b><br>";
+    html+="<table style='margin:8px auto; border-collapse:collapse; font-size:14px;'>";
+    html+="<tr style='background:#eee'><th style='padding:4px 8px;'>名前</th><th style='padding:4px 8px;'>合計</th><th style='padding:4px 8px;'>反応式</th><th style='padding:4px 8px;'>半反応式</th><th style='padding:4px 8px;'>電子pt</th></tr>";
+    for(var i=0;i<playerNames.length;i++){
+        html+="<tr><td style='padding:4px 8px;'>"+playerNames[i]+"</td>";
+        html+="<td style='padding:4px 8px; font-weight:bold;'>"+playerPoints[i]+"pt</td>";
+        html+="<td style='padding:4px 8px;'>"+playerFullReactions[i]+"回</td>";
+        html+="<td style='padding:4px 8px;'>"+playerHalfReactions[i]+"回</td>";
+        html+="<td style='padding:4px 8px;'>"+playerElecPoints[i]+"pt</td></tr>";
+    }
+    html+="</table><br>反応完成: "+totalReactions+"回　傾向ミス: "+totalMistakes+"回";
+    document.getElementById("result-content").innerHTML=html;
+    document.getElementById("result-overlay").style.display="block";
+}
+
+window.showForceEndConfirm = function(){ document.getElementById("force-end-modal").style.display="flex"; };
+window.forceEnd = function(){
+    document.getElementById("force-end-modal").style.display="none";
+    var remaining=[];
+    for(var i=0;i<playerNames.length;i++) if(winners.indexOf(i)===-1) remaining.push(i);
+    remaining.sort(function(a,b){ return (players[a]?players[a].length:0)-(players[b]?players[b].length:0); });
+    for(var i=0;i<remaining.length;i++) winners.push(remaining[i]);
+    pushState(); showFinal();
+};
+
+</script>
+</body>
+</html>
