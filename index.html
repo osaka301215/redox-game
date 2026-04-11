@@ -539,6 +539,47 @@ function setNotice(t){ document.getElementById("draw-notice").textContent=t; }
 
 function isMyTurn(){ return myIndex===current; }
 
+// 親番で出せるカードがあるか判定（★以外）
+function hasPlayableFirstCard(hand) {
+    for (var i = 0; i < hand.length; i++) {
+        var c = hand[i];
+        if (c === "★") continue; // ★は除外
+        if (c === "e-") continue; // 電子は親で出せない
+        var p = parse(c);
+        if (p.elem === "Fe" && !p.isIon) continue; // Fe単体は親で出せない
+        // H+は2枚必要
+        if (c === "H+") {
+            var cnt = 0;
+            for (var j = 0; j < hand.length; j++) if (hand[j] === "H+") cnt++;
+            if (cnt < 2) continue;
+        }
+        return true;
+    }
+    return false;
+}
+
+// 手札を全部山札に戻して引き直し
+function reshuffleHand(playerIdx) {
+    var hand = players[playerIdx];
+    var count = hand.length;
+    // 手札を山札に戻す
+    deck = deck.concat(hand);
+    players[playerIdx] = [];
+    // シャッフル
+    deck.sort(function(){ return Math.random() - 0.5; });
+    // 元の枚数だけ引く
+    var rejected = [];
+    while (players[playerIdx].length < count && deck.length > 0) {
+        var card = deck.pop();
+        var cnt = 0;
+        for (var k = 0; k < players[playerIdx].length; k++) if (players[playerIdx][k] === card) cnt++;
+        if (card !== "e-" && card !== "★" && cnt >= 2) rejected.push(card);
+        else players[playerIdx].push(card);
+    }
+    deck = deck.concat(rejected);
+    deck.sort(function(){ return Math.random() - 0.5; });
+}
+
 function getWildChoice(){
     return new Promise(function(resolve){
         var modal=document.getElementById("wild-modal");
@@ -554,6 +595,17 @@ function getWildChoice(){
         modal.style.display="flex";
     });
 }
+
+window.reshuffleAndPass = function(){
+    if(!isMyTurn()) return;
+    if(!isFirstTurn) return;
+    if(hasPlayableFirstCard(players[myIndex])){ msg("出せるカードがあります！"); return; }
+    var count = players[myIndex].length;
+    reshuffleHand(myIndex);
+    msg("手札を" + count + "枚交換しました。次のプレイヤーへ。", true);
+    pushState();
+    setTimeout(function(){ nextPlayer(); }, 1500);
+};
 
 window.drawOne = function(){
     if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
@@ -1097,6 +1149,14 @@ function renderAll(){
             btn.textContent=(side==="left"?"反応物側":"生成物側")+(isFirstTurn?"に出して開始":"に出す");
             btn.onclick=function(){ window.play(side); }; ctrl.appendChild(btn);
         });
+        // 親番で出せるカードがない場合は手札交換ボタンを表示
+        if(isFirstTurn && !hasPlayableFirstCard(players[myIndex])){
+            var reshuffleBtn=document.createElement("button");
+            reshuffleBtn.textContent="🔄 手札交換（出せるカードなし）";
+            reshuffleBtn.style.backgroundColor="#e67e22";
+            reshuffleBtn.onclick=window.reshuffleAndPass;
+            ctrl.appendChild(reshuffleBtn);
+        }
         if(!isFirstTurn){
             if(playedThisTurn){
                 var endBtn=document.createElement("button"); endBtn.textContent="ターン終了";
