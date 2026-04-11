@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>酸化還元ゲーム～イオン化傾向編～</title>
+<title>酸化還元ゲーム オンライン</title>
 <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; background-color: #d6ecd2; color: #333; margin: 0; padding: 20px; position: relative; }
     #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; display: none; }
@@ -61,7 +61,7 @@
 
 <!-- ① 最初の画面：作る or 参加する -->
 <div id="setup-screen">
-    <h2 style="color:#2c3e50;">🧪 酸化還元ゲーム～イオン化傾向編～ オンライン</h2>
+    <h2 style="color:#2c3e50;">🧪 酸化還元ゲーム オンライン</h2>
     <div style="margin: 20px 0;">
         <input type="text" id="my-name-input" class="name-input" placeholder="あなたの名前" style="width:250px; font-size:18px; padding:10px;">
     </div>
@@ -178,7 +178,7 @@
 
 <!-- ⑤ ゲーム画面 -->
 <div id="game-area" style="display:none;">
-    <h2>🧪 酸化還元ゲーム～イオン化傾向編～ オンライン</h2>
+    <h2>🧪 酸化還元ゲーム オンライン</h2>
     <div id="turn-banner" class="not-my-turn-banner">接続中...</div>
     <div id="cap-info" style="font-weight:bold; color:#2980b9; margin-bottom:5px; cursor:pointer;" onclick="toggleCap()" title="クリックで表示/非表示">電子枠：未確定</div>
     <div id="violation-overlay" class="overlay" style="background:#e74c3c;">!! イオン化傾向に反しています !!<br>ペナルティ：山札から4枚</div>
@@ -247,6 +247,7 @@ var parentElement = "", reactionCap = 0, drawnThisTurn = false;
 var playerPoints = [], playerFullReactions = [], playerHalfReactions = [], playerElecPoints = [];
 var handSorted = false, newCardIndex = -1, capVisible = false;
 var cpuSlots = []; // CPUスロット配列 [false, true, ...]
+var playedThisTurnCards = []; // このターンに出したカード {side, card} のリスト
 var cpuThinking = false; // CPU思考中フラグ
 var cpuLock = false; // CPUターン実行中ロック
 
@@ -697,6 +698,7 @@ window.play = async function(side){
         players[myIndex].splice(handIdx,1);
         targetField.push(cToField);
     }
+    for(var ri=0;ri<transformedCards.length;ri++) playedThisTurnCards.push({side:side,card:transformedCards[ri]});
     selected=[]; playedThisTurn=true; drawnThisTurn=false; noPlayCount=0; setNotice("");
     lastPlayerPlayed=myIndex;
 
@@ -720,15 +722,29 @@ window.play = async function(side){
     }
 };
 
+window.cancelPlay = function(){
+    if(!isMyTurn()) return;
+    if(!playedThisTurn || playedThisTurnCards.length===0) return;
+    for(var i=playedThisTurnCards.length-1;i>=0;i--){
+        var entry=playedThisTurnCards[i];
+        var field=(entry.side==="left")?fieldLeft:fieldRight;
+        var idx=field.lastIndexOf(entry.card);
+        if(idx!==-1) field.splice(idx,1);
+        players[myIndex].push(entry.card);
+    }
+    playedThisTurnCards=[]; playedThisTurn=false;
+    msg(""); pushState(); renderAll();
+};
+
 window.endTurn = function(){
     if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
     if(playedThisTurn&&checkViolation()){ triggerPenalty(); return; }
-    playedThisTurn=false; drawnThisTurn=false; setNotice("");
+    playedThisTurn=false; drawnThisTurn=false; playedThisTurnCards=[]; setNotice("");
     nextPlayer();
 };
 
 function nextPlayer(){
-    drawnThisTurn=false; newCardIndex=-1; handSorted=false; setNotice("");
+    drawnThisTurn=false; newCardIndex=-1; handSorted=false; playedThisTurnCards=[]; setNotice("");
     if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
     do{ current=(current+1)%playerNames.length; } while(winners.indexOf(current)!==-1);
     pushState();
@@ -1103,6 +1119,8 @@ function renderAll(){
             if(playedThisTurn){
                 var endBtn=document.createElement("button"); endBtn.textContent="ターン終了";
                 endBtn.onclick=window.endTurn; ctrl.appendChild(endBtn);
+                var cancelBtn=document.createElement("button"); cancelBtn.textContent="↩ やり直す";
+                cancelBtn.style.backgroundColor="#e67e22"; cancelBtn.onclick=window.cancelPlay; ctrl.appendChild(cancelBtn);
             } else if(!drawnThisTurn){
                 var drawBtn=document.createElement("button"); drawBtn.className="btn-draw";
                 drawBtn.textContent="🃏 1枚引く"; drawBtn.onclick=window.drawOne; ctrl.appendChild(drawBtn);
