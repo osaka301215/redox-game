@@ -202,6 +202,7 @@ var winCount = 2;
 var deck = [], players = [], playerNames = [], current = 0, selected = [];
 var fieldLeft = [], fieldRight = [];
 var lastPlayerPlayed = null, noPlayCount = 0, isFirstTurn = true, playedThisTurn = false;
+var playedThisTurnCards = []; // このターンに出したカード {side, card} のリスト
 var totalReactions = 0, totalMistakes = 0, winners = [];
 var parentElement = "", reactionCap = 0, drawnThisTurn = false;
 var playerPoints = [], playerFullReactions = [], playerHalfReactions = [], playerElecPoints = [];
@@ -361,6 +362,7 @@ function loadGameState(gs) {
     noPlayCount = gs.noPlayCount || 0;
     isFirstTurn = gs.isFirstTurn !== undefined ? gs.isFirstTurn : true;
     playedThisTurn = gs.playedThisTurn || false;
+    playedThisTurnCards = gs.playedThisTurnCards || [];
     drawnThisTurn = gs.drawnThisTurn || false;
     parentElement = gs.parentElement || "";
     reactionCap = gs.reactionCap || 0;
@@ -379,7 +381,7 @@ function getGameState() {
         deck: deck, players: players, current: current,
         fieldLeft: fieldLeft, fieldRight: fieldRight,
         lastPlayerPlayed: lastPlayerPlayed, noPlayCount: noPlayCount,
-        isFirstTurn: isFirstTurn, playedThisTurn: playedThisTurn,
+        isFirstTurn: isFirstTurn, playedThisTurn: playedThisTurn, playedThisTurnCards: playedThisTurnCards,
         drawnThisTurn: drawnThisTurn, parentElement: parentElement,
         reactionCap: reactionCap, totalReactions: totalReactions,
         totalMistakes: totalMistakes, winners: winners,
@@ -606,6 +608,8 @@ window.play = async function(side){
         players[myIndex].splice(handIdx,1);
         targetField.push(cToField);
     }
+    // このターンに出したカードを記録
+    for(var i=0;i<transformedCards.length;i++) playedThisTurnCards.push({side:side,card:transformedCards[i]});
     selected=[]; playedThisTurn=true; drawnThisTurn=false; noPlayCount=0; setNotice("");
     lastPlayerPlayed=myIndex;
 
@@ -629,15 +633,30 @@ window.play = async function(side){
     }
 };
 
+window.cancelPlay = function(){
+    if(!isMyTurn()) return;
+    if(!playedThisTurn||playedThisTurnCards.length===0) return;
+    // 出したカードを逆順で手札に戻す
+    for(var i=playedThisTurnCards.length-1;i>=0;i--){
+        var entry=playedThisTurnCards[i];
+        var field=(entry.side==="left")?fieldLeft:fieldRight;
+        var idx=field.lastIndexOf(entry.card);
+        if(idx!==-1) field.splice(idx,1);
+        players[myIndex].push(entry.card);
+    }
+    playedThisTurnCards=[]; playedThisTurn=false;
+    msg(""); pushState(); renderAll();
+};
+
 window.endTurn = function(){
     if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
     if(playedThisTurn&&checkViolation()){ triggerPenalty(); return; }
-    playedThisTurn=false; drawnThisTurn=false; setNotice("");
+    playedThisTurn=false; drawnThisTurn=false; playedThisTurnCards=[]; setNotice("");
     nextPlayer();
 };
 
 function nextPlayer(){
-    drawnThisTurn=false; newCardIndex=-1; handSorted=false; setNotice("");
+    drawnThisTurn=false; newCardIndex=-1; handSorted=false; playedThisTurnCards=[]; setNotice("");
     if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
     do{ current=(current+1)%playerNames.length; } while(winners.indexOf(current)!==-1);
     pushState();
@@ -776,6 +795,8 @@ function renderAll(){
             if(playedThisTurn){
                 var endBtn=document.createElement("button"); endBtn.textContent="ターン終了";
                 endBtn.onclick=window.endTurn; ctrl.appendChild(endBtn);
+                var cancelBtn=document.createElement("button"); cancelBtn.textContent="↩ やり直す";
+                cancelBtn.style.backgroundColor="#e67e22"; cancelBtn.onclick=window.cancelPlay; ctrl.appendChild(cancelBtn);
             } else if(!drawnThisTurn){
                 var drawBtn=document.createElement("button"); drawBtn.className="btn-draw";
                 drawBtn.textContent="🃏 1枚引く"; drawBtn.onclick=window.drawOne; ctrl.appendChild(drawBtn);
@@ -813,7 +834,7 @@ function showFinal(){
     html+="<br>💰 <b>獲得ポイント合計："+totalPt+"pt</b><br>";
     html+="<br><b>📊 ポイント内訳</b><br>";
     html+="<table style='margin:8px auto; border-collapse:collapse; font-size:14px;'>";
-    html+="<tr style='background:#2980b9; color:white;'><th style='padding:4px 8px;'>名前</th><th style='padding:4px 8px;'>合計</th><th style='padding:4px 8px;'>反応式</th><th style='padding:4px 8px;'>半反応式</th><th style='padding:4px 8px;'>電子pt</th></tr>";
+    html+="<tr style='background:#eee'><th style='padding:4px 8px;'>名前</th><th style='padding:4px 8px;'>合計</th><th style='padding:4px 8px;'>反応式</th><th style='padding:4px 8px;'>半反応式</th><th style='padding:4px 8px;'>電子pt</th></tr>";
     for(var i=0;i<playerNames.length;i++){
         html+="<tr><td style='padding:4px 8px;'>"+playerNames[i]+"</td>";
         html+="<td style='padding:4px 8px; font-weight:bold;'>"+playerPoints[i]+"pt</td>";
