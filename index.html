@@ -95,6 +95,7 @@
             </select>
             <span style="font-size:13px; color:#888;">以下で上がり</span>
         </div>
+        <div style="margin:12px 0;" id="cpu-settings-area"></div>
         <button onclick="createRoom()" style="background:#27ae60; width:100%; padding:15px; font-size:18px; margin-top:15px;">ルームを作成！</button>
         <button onclick="backToTop()" style="background:#95a5a6; width:100%; padding:10px; font-size:14px; margin-top:8px;">← 戻る</button>
     </div>
@@ -244,6 +245,8 @@ var totalReactions = 0, totalMistakes = 0, winners = [];
 var parentElement = "", reactionCap = 0, drawnThisTurn = false;
 var playerPoints = [], playerFullReactions = [], playerHalfReactions = [], playerElecPoints = [];
 var handSorted = false, newCardIndex = -1, capVisible = false;
+var cpuSlots = []; // CPUスロット配列 [false, true, ...]
+var cpuThinking = false; // CPU思考中フラグ
 
 var ionizationSeries = ["Na","Al","Zn","Fe","H","Cu","Ag"];
 var cardTypes = ["Na","Na+","Al","Al3+","Zn","Zn2+","Cu","Cu2+","Ag","Ag+","Fe","Fe2+","Fe3+","H+","H2","e-"];
@@ -268,17 +271,56 @@ window.showJoinRoom = function() {
 };
 
 // ===== ルーム作成 =====
+// CPU設定UIを生成
+function updateCpuSettings() {
+    var count = parseInt(document.getElementById("player-count-select").value);
+    var area = document.getElementById("cpu-settings-area");
+    if (!area) return;
+    var html = '<div style="font-size:13px; color:#555; margin-bottom:6px;">各スロットの種類:</div>';
+    for (var i = 0; i < count; i++) {
+        var label = i === 0 ? "P1（あなた）" : "P" + (i+1);
+        html += '<div style="margin:4px 0; display:flex; align-items:center; gap:8px;">';
+        html += '<span style="width:80px; font-size:13px;">' + label + ':</span>';
+        if (i === 0) {
+            html += '<span style="font-size:13px; color:#27ae60;">👤 人間</span>';
+        } else {
+            html += '<select id="slot-' + i + '" style="padding:4px; font-size:13px; border-radius:4px;">';
+            html += '<option value="human">👤 人間</option>';
+            html += '<option value="cpu">🤖 CPU（弱）</option>';
+            html += '</select>';
+        }
+        html += '</div>';
+    }
+    area.innerHTML = html;
+}
+document.addEventListener("DOMContentLoaded", function() {
+    var sel = document.getElementById("player-count-select");
+    if (sel) { sel.addEventListener("change", updateCpuSettings); updateCpuSettings(); }
+});
+
 window.createRoom = async function() {
     var maxPlayers = parseInt(document.getElementById("player-count-select").value);
     winCount = parseInt(document.getElementById("win-count-select").value);
     roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     isHost = true; myIndex = 0;
+    // CPU設定を取得
+    var cpuSlots = [false]; // P1は常に人間
+    for (var i = 1; i < maxPlayers; i++) {
+        var sel = document.getElementById("slot-" + i);
+        cpuSlots.push(sel ? sel.value === "cpu" : false);
+    }
+    // CPU用の名前を生成
+    var initPlayers = [myName];
+    for (var i = 1; i < maxPlayers; i++) {
+        if (cpuSlots[i]) initPlayers.push("CPU" + i);
+    }
     await set(ref(db, "rooms/" + roomId), {
         status: "waiting",
         host: myName,
         maxPlayers: maxPlayers,
         winCount: winCount,
-        players: [myName],
+        cpuSlots: cpuSlots,
+        players: initPlayers,
         gameState: null
     });
     hideAll();
@@ -315,10 +357,12 @@ function listenWaiting() {
         if (!snap.exists()) return;
         var room = snap.val();
         var pl = room.players || [];
+        var cs = room.cpuSlots || [];
         var html = "";
         pl.forEach(function(name, i) {
             var tag = (i === 0) ? " 👑" : "";
-            html += '<div class="player-list-item">' + name + tag + '</div>';
+            var cpuTag = cs[i] ? " 🤖" : "";
+            html += '<div class="player-list-item">' + name + tag + cpuTag + '</div>';
         });
         document.getElementById("waiting-players").innerHTML = html;
         document.getElementById("waiting-status").textContent = pl.length + " / " + room.maxPlayers + " 人参加中";
@@ -372,6 +416,7 @@ function buildInitialState(pl, wc) {
         playerHalfReactions: pl.map(function(){return 0;}),
         playerElecPoints: pl.map(function(){return 0;}),
         winCount: wc,
+        cpuSlots: cpuSlots,
         log: ""
     };
 }
@@ -399,6 +444,7 @@ function loadGameState(gs) {
     noPlayCount = gs.noPlayCount || 0;
     isFirstTurn = gs.isFirstTurn !== undefined ? gs.isFirstTurn : true;
     playedThisTurn = gs.playedThisTurn || false;
+    cpuSlots = gs.cpuSlots || playerNames.map(function(){return false;});
     drawnThisTurn = gs.drawnThisTurn || false;
     parentElement = gs.parentElement || "";
     reactionCap = gs.reactionCap || 0;
@@ -417,7 +463,7 @@ function getGameState() {
         deck: deck, players: players, current: current,
         fieldLeft: fieldLeft, fieldRight: fieldRight,
         lastPlayerPlayed: lastPlayerPlayed, noPlayCount: noPlayCount,
-        isFirstTurn: isFirstTurn, playedThisTurn: playedThisTurn,
+        isFirstTurn: isFirstTurn, playedThisTurn: playedThisTurn, cpuSlots: cpuSlots,
         drawnThisTurn: drawnThisTurn, parentElement: parentElement,
         reactionCap: reactionCap, totalReactions: totalReactions,
         totalMistakes: totalMistakes, winners: winners,
@@ -441,6 +487,11 @@ function listenGameState() {
         var gs = snap.val();
         loadGameState(gs);
         renderAll();
+        // ホストがCPUターンを制御
+        if(isHost && cpuSlots[current] && winners.indexOf(current)===-1 && !cpuThinking){
+            cpuThinking=true;
+            setTimeout(function(){ cpuThinking=false; doCpuTurn(); }, 1200);
+        }
     });
 }
 
@@ -679,6 +730,234 @@ function nextPlayer(){
     if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
     do{ current=(current+1)%playerNames.length; } while(winners.indexOf(current)!==-1);
     pushState();
+    // CPUのターンなら自動実行
+    if(cpuSlots[current] && isHost) {
+        setTimeout(doCpuTurn, 1200);
+    }
+}
+
+// ===== CPU思考 =====
+function doCpuTurn() {
+    if(!cpuSlots[current]) return;
+    if(winners.indexOf(current)!==-1){ nextPlayer(); return; }
+
+    var hand = players[current];
+    if(!hand || hand.length===0){ nextPlayer(); return; }
+
+    // 親番の場合：ワイルド以外で電子・Fe単体以外のカードをランダムに1種出す
+    if(isFirstTurn) {
+        var candidates = [];
+        for(var i=0;i<hand.length;i++){
+            var c=hand[i];
+            if(c==="e-"||c==="★") continue;
+            var p=parse(c);
+            if(p.elem==="Fe"&&!p.isIon) continue;
+            candidates.push(i);
+        }
+        if(candidates.length===0){ nextPlayer(); return; }
+        // ランダムに1種類選んでその種類を全部or1枚出す
+        var pick = candidates[Math.floor(Math.random()*candidates.length)];
+        var pickCard = hand[pick];
+        var pickP = parse(pickCard);
+        // 同じ種類を集める（最大2枚、H+は2枚セット）
+        var toPlay = [];
+        for(var i=0;i<hand.length;i++){
+            var p=parse(hand[i]);
+            if(p.elem===pickP.elem && p.isIon===pickP.isIon && hand[i]===pickCard) toPlay.push(i);
+            if(toPlay.length>=2) break;
+        }
+        // H+は2枚セット必須
+        if(pickCard==="H+" && toPlay.length<2){ nextPlayer(); return; }
+        if(pickCard==="H+") toPlay=toPlay.slice(0,2);
+        else toPlay=[toPlay[0]]; // 弱CPUは1枚だけ出す
+
+        // フィールドに出す
+        var side="left";
+        var transformedCards=toPlay.map(function(i){return hand[i];});
+        var p0=parse(transformedCards[0],transformedCards);
+        parentElement=p0.elem;
+        reactionCap=0;
+        for(var i=0;i<transformedCards.length;i++){
+            var p=parse(transformedCards[i],transformedCards);
+            var v=getVPerAtom(transformedCards[i],transformedCards);
+            if(v===0){nextPlayer();return;}
+            reactionCap+=p.atoms*v;
+        }
+        toPlay.sort(function(a,b){return b-a;});
+        for(var i=0;i<toPlay.length;i++){
+            fieldLeft.push(hand[toPlay[i]]);
+            hand.splice(toPlay[i],1);
+        }
+        isFirstTurn=false; playedThisTurn=false;
+        checkWinner(current);
+        pushState();
+        nextPlayer();
+        return;
+    }
+
+    // 通常番：出せるカードを探す
+    var playResult = findCpuPlay();
+    if(playResult){
+        // カードを出す
+        var side=playResult.side;
+        var targetField=(side==="left")?fieldLeft:fieldRight;
+        var toPlay=playResult.indices;
+        var transformedCards=playResult.cards;
+        toPlay.sort(function(a,b){return b-a;});
+        for(var i=0;i<toPlay.length;i++){
+            targetField.push(transformedCards[transformedCards.length-1-i]);
+            hand.splice(toPlay[i],1);
+        }
+        lastPlayerPlayed=current; noPlayCount=0;
+        playedThisTurn=true;
+        checkWinner(current);
+        checkComplete();
+        // ターン終了チェック
+        if(playedThisTurn && checkViolation()){ triggerPenalty(); return; }
+        playedThisTurn=false;
+        pushState();
+        nextPlayer();
+    } else {
+        // 出せないので1枚引いてパス
+        if(deck.length>0) hand.push(deck.pop());
+        noPlayCount++;
+        checkFlowCondition();
+    }
+}
+
+function checkWinner(idx){
+    if(players[idx].length<=winCount && winners.indexOf(idx)===-1){
+        winners.push(idx);
+        var rank=winners.length;
+        var wo=document.getElementById("winner-overlay");
+        document.getElementById("winner-overlay-text").innerHTML=rank+"位上がり！🎊<br>"+playerNames[idx];
+        wo.style.display="block";
+        setTimeout(function(){wo.style.display="none";},2000);
+    }
+}
+
+function canPlayCard(card, side, extraCards){
+    extraCards = extraCards || [card];
+    var targetField = (side==="left")?fieldLeft:fieldRight;
+    var allField = fieldLeft.concat(fieldRight);
+    var p = parse(card);
+
+    // 電子チェック
+    if(card==="e-"){
+        var sideCards = targetField.concat([card]);
+        var hasSolid = false;
+        for(var i=0;i<sideCards.length;i++){var sp=parse(sideCards[i]);if(sp.elem!=="e"&&!sp.isIon){hasSolid=true;break;}}
+        if(hasSolid) return false;
+        var curE=0; for(var i=0;i<targetField.length;i++) if(targetField[i]==="e-") curE++;
+        if(curE+1>reactionCap) return false;
+        return true;
+    }
+
+    if(p.elem==="?" || p.elem==="e") return false;
+
+    // 元素数チェック
+    var fElemSet={};
+    for(var i=0;i<allField.length;i++){var fp=parse(allField[i]);if(fp.elem!=="e")fElemSet[fp.elem]=true;}
+    if(!fElemSet[p.elem]) fElemSet[p.elem]=true;
+    if(Object.keys(fElemSet).length>2) return false;
+
+    // イオン/単体チェック
+    var sideCards=targetField.concat([card]);
+    var solidElems={},ionElems={};
+    for(var i=0;i<sideCards.length;i++){
+        if(sideCards[i]==="e-") continue;
+        var sp=parse(sideCards[i]);
+        if(!sp.isIon) solidElems[sp.elem]=true; else ionElems[sp.elem]=true;
+    }
+    if(Object.keys(solidElems).length>1) return false;
+    if(Object.keys(ionElems).length>1) return false;
+
+    // Fe2+とFe3+混在
+    var sHasFe2=sideCards.indexOf("Fe2+")!==-1, sHasFe3=sideCards.indexOf("Fe3+")!==-1;
+    if(sHasFe2&&sHasFe3) return false;
+
+    // 相方チェック
+    var parentIsIon=false;
+    for(var i=0;i<allField.length;i++){var fp=parse(allField[i]);if(fp.elem===parentElement&&fp.isIon){parentIsIon=true;break;}}
+    var alreadyOpp=false;
+    for(var i=0;i<allField.length;i++){
+        var fp=parse(allField[i]);
+        if(fp.elem!==parentElement) continue;
+        if(fp.isIon!==parentIsIon){alreadyOpp=true;break;}
+        if(fp.elem==="Fe"&&fp.isIon&&parentIsIon){
+            var pc2=""; for(var j=0;j<allField.length;j++){var ff=parse(allField[j]);if(ff.elem==="Fe"&&ff.isIon){pc2=allField[j];break;}}
+            if((pc2==="Fe2+"&&allField[i]==="Fe3+")||(pc2==="Fe3+"&&allField[i]==="Fe2+")){alreadyOpp=true;break;}
+        }
+    }
+    if(!alreadyOpp){
+        if(p.elem!==parentElement) return false;
+        if(p.isIon===parentIsIon){
+            if(p.elem!=="Fe") return false;
+            if(!p.isIon) return false;
+        }
+    }
+
+    // Fe単体の価数
+    if(p.elem==="Fe"&&!p.isIon){
+        var fv=getFeValence([card]);
+        if(fv===0) return false;
+        if(reactionCap%fv!==0) return false;
+        var maxA=reactionCap/fv;
+        var curA=0; for(var i=0;i<targetField.length;i++){var tp=parse(targetField[i]);if(tp.elem==="Fe")curA+=tp.atoms;}
+        if(curA+1>maxA) return false;
+        return true;
+    }
+
+    // 枠チェック
+    var vpa=p.vPerAtom;
+    if(vpa===0) return false;
+    // Fe2+↔Fe3+は枠チェックスキップ
+    var lf2=fieldLeft.indexOf("Fe2+")!==-1,lf3=fieldLeft.indexOf("Fe3+")!==-1;
+    var rf2=fieldRight.indexOf("Fe2+")!==-1,rf3=fieldRight.indexOf("Fe3+")!==-1;
+    var isFeSwap=(lf2&&(rf3||card==="Fe3+"))||(lf3&&(rf2||card==="Fe2+"))||(rf2&&card==="Fe3+")||(rf3&&card==="Fe2+");
+    if(!(p.elem==="Fe"&&isFeSwap)){
+        if(reactionCap%vpa!==0) return false;
+        var maxA=reactionCap/vpa;
+        var curA=0; for(var i=0;i<targetField.length;i++){var tp=parse(targetField[i]);if(tp.elem===p.elem)curA+=tp.atoms;}
+        if(curA+1>maxA) return false;
+    }
+    return true;
+}
+
+function findCpuPlay(){
+    var hand=players[current];
+    // H+は2枚セットが必要なので別処理
+    var hplusIndices=[];
+    for(var i=0;i<hand.length;i++) if(hand[i]==="H+") hplusIndices.push(i);
+
+    var sides=["left","right"];
+    // シャッフルしてランダム性を出す
+    var indices=[];
+    for(var i=0;i<hand.length;i++) indices.push(i);
+    indices.sort(function(){return Math.random()-0.5;});
+    sides.sort(function(){return Math.random()-0.5;});
+
+    for(var si=0;si<sides.length;si++){
+        var side=sides[si];
+        for(var ii=0;ii<indices.length;ii++){
+            var idx=indices[ii];
+            var card=hand[idx];
+            if(card==="★") continue; // ワイルドはスキップ（弱CPUは使わない）
+            // H+は2枚セット
+            if(card==="H+"){
+                if(hplusIndices.length<2) continue;
+                var i1=hplusIndices[0], i2=hplusIndices[1];
+                if(canPlayCard("H+",side,["H+","H+"])&&canPlayCard("H+",side,["H+","H+"])){
+                    return {side:side, indices:[i1,i2], cards:["H+","H+"]};
+                }
+                continue;
+            }
+            if(canPlayCard(card,side,[card])){
+                return {side:side, indices:[idx], cards:[card]};
+            }
+        }
+    }
+    return null;
 }
 
 function clearField(){
@@ -755,6 +1034,9 @@ function renderAll(){
     if(isMyTurn()){
         banner.className="my-turn-banner";
         banner.textContent="🟢 あなたのターンです！";
+    } else if(cpuSlots[current]){
+        banner.className="not-my-turn-banner";
+        banner.textContent="🤖 "+playerNames[current]+" (CPU) が考え中...";
     } else {
         banner.className="not-my-turn-banner";
         banner.textContent="⏳ "+playerNames[current]+" のターン...";
