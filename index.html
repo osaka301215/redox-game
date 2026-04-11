@@ -44,12 +44,14 @@
     .player-list-item { padding: 8px 15px; margin: 5px; background: #eafaf1; border-radius: 8px; font-weight: bold; }
     .my-turn-banner { background: #27ae60; color: white; padding: 8px; border-radius: 8px; margin: 8px auto; max-width: 850px; font-weight: bold; }
     .not-my-turn-banner { background: #95a5a6; color: white; padding: 8px; border-radius: 8px; margin: 8px auto; max-width: 850px; }
-    body.forest-mode #message { color: #ffeb3b; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
-    body.forest-mode #info { color: #e8f5e9; text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-weight: bold; }
-    body.forest-mode #draw-notice { color: #a5d6a7; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
-    body.forest-mode #cap-info { color: #81d4fa !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
-    body.forest-mode .active-p { color: #ffcc02; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
-    body.forest-mode h2 { color: #e8f5e9; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+    /* 暗い背景共通スタイル */
+    body.dark-bg #message { color: #ffeb3b; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+    body.dark-bg #info { color: #e8f5e9; text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-weight: bold; }
+    body.dark-bg #draw-notice { color: #a5d6a7; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+    body.dark-bg #cap-info { color: #81d4fa !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+    body.dark-bg .active-p { color: #ffcc02; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+    body.dark-bg h2 { color: #e8f5e9; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+    body.dark-bg #hand-title { color: #e8f5e9; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
 </style>
 </head>
 <body>
@@ -58,7 +60,7 @@
 <!-- 背景切り替えボタン -->
 <div id="bg-switcher" style="position:fixed; top:15px; right:15px; z-index:999; background:rgba(0,0,0,0.5); border-radius:12px; padding:8px 12px; display:flex; gap:8px; align-items:center;">
   <span style="color:white; font-size:12px;">背景:</span>
-  <button onclick="setBg('none')" id="btn-bg-none" style="padding:4px 8px; font-size:12px; background:#27ae60; border-radius:6px; width:28px;"></button>
+  <button onclick="setBg('none')" id="btn-bg-none" style="padding:4px 8px; font-size:12px; background:#27ae60; border-radius:6px;">　</button>
   <button onclick="setBg('space')" id="btn-bg-space" style="padding:4px 8px; font-size:12px; background:#2c3e50; border-radius:6px;">🌌</button>
   <button onclick="setBg('ocean')" id="btn-bg-ocean" style="padding:4px 8px; font-size:12px; background:#2980b9; border-radius:6px;">🌊</button>
   <button onclick="setBg('sky')" id="btn-bg-sky" style="padding:4px 8px; font-size:12px; background:#87ceeb; border-radius:6px;">☁️</button>
@@ -1274,7 +1276,6 @@ function setBg(mode) {
         var btn = document.getElementById('btn-bg-' + m);
         if (btn) btn.style.opacity = (m === mode) ? '1' : '0.5';
     });
-    document.body.classList.remove('forest-mode');
     if (mode === 'none') {
         bgCanvas.style.display = 'none';
         document.body.style.backgroundColor = '#d6ecd2';
@@ -1283,16 +1284,17 @@ function setBg(mode) {
     bgCanvas.style.display = 'block';
     if (mode === 'space') {
         document.body.style.backgroundColor = '#0a0a1a';
+        document.body.classList.add('dark-bg');
         initSpace();
     } else if (mode === 'ocean') {
         document.body.style.backgroundColor = '#001a33';
+        document.body.classList.add('dark-bg');
         initOcean();
     } else if (mode === 'sky') {
         document.body.style.backgroundColor = '#87ceeb';
         initSky();
     } else if (mode === 'forest') {
         document.body.style.backgroundColor = '#1a3a0a';
-        document.body.classList.add('forest-mode');
         initForest();
     }
     animateBg();
