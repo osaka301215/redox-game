@@ -493,7 +493,29 @@ function listenGameState() {
     onValue(ref(db, "rooms/" + roomId + "/gameState"), function(snap) {
         if (!snap.exists()) return;
         var gs = snap.val();
+        // 結果画面表示中に新しいゲームが来たら再起動
+        if (document.getElementById("result-overlay").style.display === "block") {
+            document.getElementById("result-overlay").style.display = "none";
+            playerNames = gs.players ? Object.values(gs.players).filter ? gs.players : playerNames : playerNames;
+            loadGameState(gs);
+            selected = []; playedThisTurnCards = [];
+            document.getElementById("left").innerHTML = "";
+            document.getElementById("right").innerHTML = "";
+            renderAll();
+            if(cpuSlots[current] && isHost && !cpuLock){
+                cpuLock = true;
+                setTimeout(doCpuTurn, 1500);
+            }
+            return;
+        }
         loadGameState(gs);
+        // 全員分の結果が出ていたら全プレイヤーにresultを表示
+        if (winners.length >= playerNames.length - 1 && playerNames.length > 0) {
+            if (document.getElementById("result-overlay").style.display !== "block") {
+                showFinal();
+            }
+            return;
+        }
         renderAll();
     });
 }
