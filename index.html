@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>酸化還元ゲーム オンライン</title>
 <style>
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; background-color: #d6ecd2; color: #333; margin: 0; padding: 20px; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; background-color: #d6ecd2; color: #333; margin: 0; padding: 20px; position: relative; }
+    #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; display: none; }
     .area { border: 2px solid #bdc3c7; padding: 15px; margin: 15px auto; background: white; border-radius: 12px; max-width: 850px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .field-container { display: flex; justify-content: center; align-items: center; gap: 20px; min-height: 120px; }
     .field-box { flex: 1; border: 1px dashed #ccc; border-radius: 8px; padding: 10px; min-height: 100px; background: #fafafa; }
@@ -46,6 +47,16 @@
 </style>
 </head>
 <body>
+<canvas id="bg-canvas"></canvas>
+
+<!-- 背景切り替えボタン -->
+<div id="bg-switcher" style="position:fixed; bottom:15px; right:15px; z-index:999; background:rgba(0,0,0,0.5); border-radius:12px; padding:8px 12px; display:flex; gap:8px; align-items:center;">
+  <span style="color:white; font-size:12px;">背景:</span>
+  <button onclick="setBg('none')" id="btn-bg-none" style="padding:4px 8px; font-size:12px; background:#27ae60; border-radius:6px;">🌿</button>
+  <button onclick="setBg('space')" id="btn-bg-space" style="padding:4px 8px; font-size:12px; background:#2c3e50; border-radius:6px;">🌌</button>
+  <button onclick="setBg('ocean')" id="btn-bg-ocean" style="padding:4px 8px; font-size:12px; background:#2980b9; border-radius:6px;">🌊</button>
+  <button onclick="setBg('sky')" id="btn-bg-sky" style="padding:4px 8px; font-size:12px; background:#87ceeb; border-radius:6px;">☁️</button>
+</div>
 
 <!-- ① 最初の画面：作る or 参加する -->
 <div id="setup-screen">
@@ -863,6 +874,302 @@ window.forceEnd = function(){
     pushState(); showFinal();
 };
 
+</script>
+<script>
+// ===== 背景アニメーション =====
+var bgMode = 'none';
+var bgCanvas = document.getElementById('bg-canvas');
+var bgCtx = bgCanvas.getContext('2d');
+var bgAnimId = null;
+var bgObjects = [];
+
+function resizeCanvas() {
+    bgCanvas.width = window.innerWidth;
+    bgCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function setBg(mode) {
+    bgMode = mode;
+    cancelAnimationFrame(bgAnimId);
+    bgObjects = [];
+    // ボタンのハイライト
+    ['none','space','ocean','sky'].forEach(function(m) {
+        var btn = document.getElementById('btn-bg-' + m);
+        if (btn) btn.style.opacity = (m === mode) ? '1' : '0.5';
+    });
+    if (mode === 'none') {
+        bgCanvas.style.display = 'none';
+        document.body.style.backgroundColor = '#d6ecd2';
+        return;
+    }
+    bgCanvas.style.display = 'block';
+    if (mode === 'space') {
+        document.body.style.backgroundColor = '#0a0a1a';
+        initSpace();
+    } else if (mode === 'ocean') {
+        document.body.style.backgroundColor = '#001a33';
+        initOcean();
+    } else if (mode === 'sky') {
+        document.body.style.backgroundColor = '#87ceeb';
+        initSky();
+    }
+    animateBg();
+}
+
+// ===== 🌌 宇宙 =====
+function initSpace() {
+    bgObjects = [];
+    // 星
+    for (var i = 0; i < 200; i++) {
+        bgObjects.push({
+            type: 'star',
+            x: Math.random() * bgCanvas.width,
+            y: Math.random() * bgCanvas.height,
+            r: Math.random() * 1.5 + 0.3,
+            alpha: Math.random(),
+            twinkle: Math.random() * 0.02 + 0.005,
+            dir: Math.random() > 0.5 ? 1 : -1
+        });
+    }
+    // 隕石
+    for (var i = 0; i < 5; i++) {
+        bgObjects.push(makeMeteorite());
+    }
+}
+function makeMeteorite() {
+    var angle = Math.PI / 6 + Math.random() * Math.PI / 6;
+    var speed = Math.random() * 2 + 1;
+    return {
+        type: 'meteorite',
+        x: Math.random() * bgCanvas.width * 1.5 - bgCanvas.width * 0.25,
+        y: -50 - Math.random() * bgCanvas.height,
+        len: Math.random() * 80 + 40,
+        speed: speed,
+        dx: Math.cos(angle) * speed,
+        dy: Math.sin(angle) * speed,
+        alpha: Math.random() * 0.7 + 0.3,
+        r: Math.random() * 2 + 1
+    };
+}
+function drawSpace() {
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+    bgObjects.forEach(function(o) {
+        if (o.type === 'star') {
+            o.alpha += o.twinkle * o.dir;
+            if (o.alpha > 1 || o.alpha < 0.1) o.dir *= -1;
+            bgCtx.beginPath();
+            bgCtx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+            bgCtx.fillStyle = 'rgba(255,255,255,' + o.alpha + ')';
+            bgCtx.fill();
+        } else if (o.type === 'meteorite') {
+            bgCtx.beginPath();
+            bgCtx.moveTo(o.x, o.y);
+            bgCtx.lineTo(o.x - o.dx * o.len / o.speed, o.y - o.dy * o.len / o.speed);
+            var grad = bgCtx.createLinearGradient(o.x, o.y, o.x - o.dx * o.len / o.speed, o.y - o.dy * o.len / o.speed);
+            grad.addColorStop(0, 'rgba(255,220,180,' + o.alpha + ')');
+            grad.addColorStop(1, 'rgba(255,220,180,0)');
+            bgCtx.strokeStyle = grad;
+            bgCtx.lineWidth = o.r;
+            bgCtx.stroke();
+            // 先端の光
+            bgCtx.beginPath();
+            bgCtx.arc(o.x, o.y, o.r * 1.5, 0, Math.PI * 2);
+            bgCtx.fillStyle = 'rgba(255,240,200,' + o.alpha + ')';
+            bgCtx.fill();
+            o.x += o.dx; o.y += o.dy;
+            if (o.y > bgCanvas.height + 50 || o.x > bgCanvas.width + 50) {
+                var idx = bgObjects.indexOf(o);
+                bgObjects[idx] = makeMeteorite();
+            }
+        }
+    });
+}
+
+// ===== 🌊 海中 =====
+function initOcean() {
+    bgObjects = [];
+    // 泡
+    for (var i = 0; i < 60; i++) {
+        bgObjects.push(makeBubble());
+    }
+    // 魚
+    for (var i = 0; i < 8; i++) {
+        bgObjects.push(makeFish());
+    }
+    // 光の筋
+    for (var i = 0; i < 8; i++) {
+        bgObjects.push({
+            type: 'ray',
+            x: Math.random() * bgCanvas.width,
+            width: Math.random() * 40 + 20,
+            speed: Math.random() * 0.3 + 0.1,
+            alpha: Math.random() * 0.07 + 0.02
+        });
+    }
+}
+function makeBubble() {
+    return {
+        type: 'bubble',
+        x: Math.random() * bgCanvas.width,
+        y: bgCanvas.height + Math.random() * bgCanvas.height,
+        r: Math.random() * 6 + 2,
+        speed: Math.random() * 0.8 + 0.3,
+        wobble: Math.random() * 0.03,
+        wobbleT: Math.random() * Math.PI * 2,
+        alpha: Math.random() * 0.4 + 0.1
+    };
+}
+function makeFish() {
+    var dir = Math.random() > 0.5 ? 1 : -1;
+    return {
+        type: 'fish',
+        x: dir === 1 ? -80 : bgCanvas.width + 80,
+        y: Math.random() * bgCanvas.height * 0.8 + bgCanvas.height * 0.1,
+        dir: dir,
+        speed: Math.random() * 0.8 + 0.4,
+        size: Math.random() * 15 + 8,
+        color: ['#ff6b6b','#ffd93d','#6bcbff','#a8ff78','#ff9f43'][Math.floor(Math.random()*5)],
+        tailPhase: Math.random() * Math.PI * 2
+    };
+}
+function drawOcean() {
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+    // 深海グラデ
+    var grad = bgCtx.createLinearGradient(0, 0, 0, bgCanvas.height);
+    grad.addColorStop(0, 'rgba(0,60,120,0.6)');
+    grad.addColorStop(1, 'rgba(0,20,60,0.8)');
+    bgCtx.fillStyle = grad;
+    bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+    bgObjects.forEach(function(o) {
+        if (o.type === 'ray') {
+            bgCtx.save();
+            bgCtx.beginPath();
+            bgCtx.moveTo(o.x, 0);
+            bgCtx.lineTo(o.x - o.width, bgCanvas.height);
+            bgCtx.lineTo(o.x + o.width, bgCanvas.height);
+            bgCtx.closePath();
+            bgCtx.fillStyle = 'rgba(100,200,255,' + o.alpha + ')';
+            bgCtx.fill();
+            bgCtx.restore();
+            o.x += o.speed;
+            if (o.x > bgCanvas.width + 100) o.x = -100;
+        } else if (o.type === 'bubble') {
+            o.wobbleT += o.wobble;
+            o.x += Math.sin(o.wobbleT) * 0.5;
+            o.y -= o.speed;
+            bgCtx.beginPath();
+            bgCtx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+            bgCtx.strokeStyle = 'rgba(180,230,255,' + o.alpha + ')';
+            bgCtx.lineWidth = 1;
+            bgCtx.stroke();
+            bgCtx.beginPath();
+            bgCtx.arc(o.x - o.r * 0.3, o.y - o.r * 0.3, o.r * 0.25, 0, Math.PI * 2);
+            bgCtx.fillStyle = 'rgba(255,255,255,' + o.alpha * 0.8 + ')';
+            bgCtx.fill();
+            if (o.y < -20) { var idx = bgObjects.indexOf(o); bgObjects[idx] = makeBubble(); bgObjects[idx].y = bgCanvas.height + 10; }
+        } else if (o.type === 'fish') {
+            o.tailPhase += 0.15;
+            o.x += o.dir * o.speed;
+            var s = o.size;
+            bgCtx.save();
+            bgCtx.translate(o.x, o.y);
+            if (o.dir === -1) bgCtx.scale(-1, 1);
+            // 尾びれ
+            var tailWag = Math.sin(o.tailPhase) * s * 0.4;
+            bgCtx.beginPath();
+            bgCtx.moveTo(-s, tailWag);
+            bgCtx.lineTo(-s * 1.8, tailWag - s * 0.6);
+            bgCtx.lineTo(-s * 1.8, tailWag + s * 0.6);
+            bgCtx.closePath();
+            bgCtx.fillStyle = o.color;
+            bgCtx.globalAlpha = 0.8;
+            bgCtx.fill();
+            // 体
+            bgCtx.beginPath();
+            bgCtx.ellipse(0, 0, s, s * 0.45, 0, 0, Math.PI * 2);
+            bgCtx.fillStyle = o.color;
+            bgCtx.fill();
+            // 目
+            bgCtx.beginPath();
+            bgCtx.arc(s * 0.5, -s * 0.1, s * 0.12, 0, Math.PI * 2);
+            bgCtx.fillStyle = '#222';
+            bgCtx.globalAlpha = 1;
+            bgCtx.fill();
+            bgCtx.restore();
+            if ((o.dir === 1 && o.x > bgCanvas.width + 100) || (o.dir === -1 && o.x < -100)) {
+                var idx = bgObjects.indexOf(o);
+                bgObjects[idx] = makeFish();
+            }
+        }
+    });
+}
+
+// ===== ☁️ 青空 =====
+function initSky() {
+    bgObjects = [];
+    for (var i = 0; i < 12; i++) {
+        bgObjects.push(makeCloud());
+        bgObjects[i].x = Math.random() * bgCanvas.width; // 最初は画面内に配置
+    }
+}
+function makeCloud() {
+    return {
+        type: 'cloud',
+        x: bgCanvas.width + 200,
+        y: Math.random() * bgCanvas.height * 0.6 + 20,
+        speed: Math.random() * 0.4 + 0.15,
+        scale: Math.random() * 1.2 + 0.6,
+        alpha: Math.random() * 0.3 + 0.6
+    };
+}
+function drawCloud(x, y, scale, alpha) {
+    bgCtx.save();
+    bgCtx.globalAlpha = alpha;
+    bgCtx.fillStyle = 'white';
+    var puffs = [
+        [0, 0, 40], [-35, 10, 30], [35, 10, 30],
+        [-18, -15, 28], [18, -15, 28], [0, -20, 22]
+    ];
+    puffs.forEach(function(p) {
+        bgCtx.beginPath();
+        bgCtx.arc(x + p[0] * scale, y + p[1] * scale, p[2] * scale, 0, Math.PI * 2);
+        bgCtx.fill();
+    });
+    bgCtx.restore();
+}
+function drawSky() {
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+    // 空グラデ
+    var grad = bgCtx.createLinearGradient(0, 0, 0, bgCanvas.height);
+    grad.addColorStop(0, 'rgba(50,150,255,0.5)');
+    grad.addColorStop(1, 'rgba(150,220,255,0.2)');
+    bgCtx.fillStyle = grad;
+    bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+    bgObjects.forEach(function(o) {
+        drawCloud(o.x, o.y, o.scale, o.alpha);
+        o.x -= o.speed;
+        if (o.x < -300) { var idx = bgObjects.indexOf(o); bgObjects[idx] = makeCloud(); }
+    });
+}
+
+// ===== アニメーションループ =====
+function animateBg() {
+    if (bgMode === 'space') drawSpace();
+    else if (bgMode === 'ocean') drawOcean();
+    else if (bgMode === 'sky') drawSky();
+    bgAnimId = requestAnimationFrame(animateBg);
+}
+
+// 初期ボタン状態
+document.addEventListener('DOMContentLoaded', function() {
+    ['none','space','ocean','sky'].forEach(function(m) {
+        var btn = document.getElementById('btn-bg-' + m);
+        if (btn) btn.style.opacity = m === 'none' ? '1' : '0.5';
+    });
+});
 </script>
 </body>
 </html>
