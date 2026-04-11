@@ -573,7 +573,7 @@ window.passTurn = function(){
     checkFlowCondition();
 };
 
-function checkFlowCondition(){
+async function checkFlowCondition(){
     if(lastPlayerPlayed===null||reactionCap===0){ nextPlayer(); return; }
     var activeCount=0;
     for(var i=0;i<playerNames.length;i++) if(winners.indexOf(i)===-1) activeCount++;
@@ -739,7 +739,7 @@ function nextPlayer(){
 }
 
 // ===== CPU思考 =====
-function doCpuTurn() {
+async function doCpuTurn() {
     if(!cpuSlots[current]){ cpuLock=false; return; }
     if(winners.indexOf(current)!==-1){ cpuLock=false; nextPlayer(); return; }
 
@@ -792,7 +792,7 @@ function doCpuTurn() {
         }
         isFirstTurn=false; playedThisTurn=false;
         checkWinner(current);
-        pushState();
+        await pushState();
         cpuLock=false;
         nextPlayer();
         return;
@@ -819,7 +819,7 @@ function doCpuTurn() {
         if(playedThisTurn && checkViolation()){ cpuLock=false; triggerPenalty(); return; }
         playedThisTurn=false;
         cpuLock=false;
-        pushState();
+        await pushState();
         nextPlayer();
     } else {
         // 出せないので1枚引いてパス
