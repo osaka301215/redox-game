@@ -118,6 +118,33 @@
         <p>手札を<b>指定枚数以下</b>にした順に順位が決まります。</p>
         <h3>▶ ターンの流れ</h3>
         <p>① カードを選んで反応物側・生成物側に出す<br>② 出せない場合は「1枚引く」→ 引いても出せなければ「パス」<br>③ 出した後は「ターン終了」で次へ</p>
+        <h3>👑 親のルール（最初の1手）</h3>
+        <p>
+        ・<b>1種類</b>の物質のみ出せる<br>
+        ・電子(e⁻)・Fe単体は出せない<br>
+        ・H⁺は<b>2枚セット</b>で出すこと<br>
+        ・出したカードが<b>電子枠</b>（反応の規模）を決定する
+        </p>
+
+        <h3>⚗️ 場のルール</h3>
+        <p>
+        ・元素は最大<b>2種類</b>まで<br>
+        ・単体は<b>1種類</b>まで<br>
+        ・イオンは<b>1種類</b>まで（Fe²⁺とFe³⁺の混在も不可）<br>
+        ・電子(e⁻)がある時は元素<b>1種のみ</b><br>
+        ・単体がある側に電子は置けない<br>
+        ・H⁺は必ず<b>2枚セット</b>で出す<br>
+        ・Fe単体はFeイオンが場に出た後に出せる（価数はそのFeイオンに従う）
+        </p>
+
+        <h3>⚡ 電子枠のルール</h3>
+        <p>
+        ・電子枠 = 親が出したカードの価数 × 原子数<br>
+        ・各元素の原子数は「電子枠 ÷ その元素の価数」が上限<br>
+        ・e⁻の枚数も電子枠を超えられない<br>
+        ・例：Zn×2を親で出す → 電子枠4、Zn²⁺は最大2個、e⁻は最大4枚
+        </p>
+
         <h3>⚡ イオン化傾向</h3>
         <p style="text-align:center;"><b>Na &gt; Al &gt; Zn &gt; Fe &gt; H &gt; Cu &gt; Ag</b></p>
         <p>違反するとターン終了時に4枚ペナルティ</p>
@@ -202,7 +229,6 @@ var winCount = 2;
 var deck = [], players = [], playerNames = [], current = 0, selected = [];
 var fieldLeft = [], fieldRight = [];
 var lastPlayerPlayed = null, noPlayCount = 0, isFirstTurn = true, playedThisTurn = false;
-var playedThisTurnCards = []; // このターンに出したカード {side, card} のリスト
 var totalReactions = 0, totalMistakes = 0, winners = [];
 var parentElement = "", reactionCap = 0, drawnThisTurn = false;
 var playerPoints = [], playerFullReactions = [], playerHalfReactions = [], playerElecPoints = [];
@@ -362,7 +388,6 @@ function loadGameState(gs) {
     noPlayCount = gs.noPlayCount || 0;
     isFirstTurn = gs.isFirstTurn !== undefined ? gs.isFirstTurn : true;
     playedThisTurn = gs.playedThisTurn || false;
-    playedThisTurnCards = gs.playedThisTurnCards || [];
     drawnThisTurn = gs.drawnThisTurn || false;
     parentElement = gs.parentElement || "";
     reactionCap = gs.reactionCap || 0;
@@ -381,7 +406,7 @@ function getGameState() {
         deck: deck, players: players, current: current,
         fieldLeft: fieldLeft, fieldRight: fieldRight,
         lastPlayerPlayed: lastPlayerPlayed, noPlayCount: noPlayCount,
-        isFirstTurn: isFirstTurn, playedThisTurn: playedThisTurn, playedThisTurnCards: playedThisTurnCards,
+        isFirstTurn: isFirstTurn, playedThisTurn: playedThisTurn,
         drawnThisTurn: drawnThisTurn, parentElement: parentElement,
         reactionCap: reactionCap, totalReactions: totalReactions,
         totalMistakes: totalMistakes, winners: winners,
@@ -608,8 +633,6 @@ window.play = async function(side){
         players[myIndex].splice(handIdx,1);
         targetField.push(cToField);
     }
-    // このターンに出したカードを記録
-    for(var i=0;i<transformedCards.length;i++) playedThisTurnCards.push({side:side,card:transformedCards[i]});
     selected=[]; playedThisTurn=true; drawnThisTurn=false; noPlayCount=0; setNotice("");
     lastPlayerPlayed=myIndex;
 
@@ -633,30 +656,15 @@ window.play = async function(side){
     }
 };
 
-window.cancelPlay = function(){
-    if(!isMyTurn()) return;
-    if(!playedThisTurn||playedThisTurnCards.length===0) return;
-    // 出したカードを逆順で手札に戻す
-    for(var i=playedThisTurnCards.length-1;i>=0;i--){
-        var entry=playedThisTurnCards[i];
-        var field=(entry.side==="left")?fieldLeft:fieldRight;
-        var idx=field.lastIndexOf(entry.card);
-        if(idx!==-1) field.splice(idx,1);
-        players[myIndex].push(entry.card);
-    }
-    playedThisTurnCards=[]; playedThisTurn=false;
-    msg(""); pushState(); renderAll();
-};
-
 window.endTurn = function(){
     if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
     if(playedThisTurn&&checkViolation()){ triggerPenalty(); return; }
-    playedThisTurn=false; drawnThisTurn=false; playedThisTurnCards=[]; setNotice("");
+    playedThisTurn=false; drawnThisTurn=false; setNotice("");
     nextPlayer();
 };
 
 function nextPlayer(){
-    drawnThisTurn=false; newCardIndex=-1; handSorted=false; playedThisTurnCards=[]; setNotice("");
+    drawnThisTurn=false; newCardIndex=-1; handSorted=false; setNotice("");
     if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
     do{ current=(current+1)%playerNames.length; } while(winners.indexOf(current)!==-1);
     pushState();
@@ -795,8 +803,6 @@ function renderAll(){
             if(playedThisTurn){
                 var endBtn=document.createElement("button"); endBtn.textContent="ターン終了";
                 endBtn.onclick=window.endTurn; ctrl.appendChild(endBtn);
-                var cancelBtn=document.createElement("button"); cancelBtn.textContent="↩ やり直す";
-                cancelBtn.style.backgroundColor="#e67e22"; cancelBtn.onclick=window.cancelPlay; ctrl.appendChild(cancelBtn);
             } else if(!drawnThisTurn){
                 var drawBtn=document.createElement("button"); drawBtn.className="btn-draw";
                 drawBtn.textContent="🃏 1枚引く"; drawBtn.onclick=window.drawOne; ctrl.appendChild(drawBtn);
