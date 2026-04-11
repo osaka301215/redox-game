@@ -50,12 +50,13 @@
 <canvas id="bg-canvas"></canvas>
 
 <!-- 背景切り替えボタン -->
-<div id="bg-switcher" style="position:fixed; bottom:15px; right:15px; z-index:999; background:rgba(0,0,0,0.5); border-radius:12px; padding:8px 12px; display:flex; gap:8px; align-items:center;">
+<div id="bg-switcher" style="position:fixed; top:15px; right:15px; z-index:999; background:rgba(0,0,0,0.5); border-radius:12px; padding:8px 12px; display:flex; gap:8px; align-items:center;">
   <span style="color:white; font-size:12px;">背景:</span>
   <button onclick="setBg('none')" id="btn-bg-none" style="padding:4px 8px; font-size:12px; background:#27ae60; border-radius:6px;">🌿</button>
   <button onclick="setBg('space')" id="btn-bg-space" style="padding:4px 8px; font-size:12px; background:#2c3e50; border-radius:6px;">🌌</button>
   <button onclick="setBg('ocean')" id="btn-bg-ocean" style="padding:4px 8px; font-size:12px; background:#2980b9; border-radius:6px;">🌊</button>
   <button onclick="setBg('sky')" id="btn-bg-sky" style="padding:4px 8px; font-size:12px; background:#87ceeb; border-radius:6px;">☁️</button>
+  <button onclick="setBg('forest')" id="btn-bg-forest" style="padding:4px 8px; font-size:12px; background:#2d5a1b; border-radius:6px;">🌿</button>
 </div>
 
 <!-- ① 最初の画面：作る or 参加する -->
@@ -183,7 +184,7 @@
     <div id="violation-overlay" class="overlay" style="background:#e74c3c;">!! イオン化傾向に反しています !!<br>ペナルティ：山札から4枚</div>
     <div id="winner-overlay" class="overlay" style="background:#27ae60; font-size:28px;"><div id="winner-overlay-text"></div></div>
     <div id="reaction-overlay" class="overlay" style="background:#2980b9; font-size:32px;"><div id="reaction-overlay-text"></div></div>
-    <div id="result-overlay" class="overlay" style="font-size:14px; max-width:480px; max-height:80vh; overflow-y:auto; padding:20px;"><div id="result-content"></div><br><div id="result-buttons"></div></div>
+    <div id="result-overlay" class="overlay" style="font-size:14px; max-width:480px; max-height:80vh; overflow-y:auto; padding:20px;"><div id="result-content"></div><br><button onclick="location.reload()" style="width:100%;">もう一度</button></div>
     <div class="area">
         <div class="field-container">
             <div class="field-box"><div><strong>反応物 (Left)</strong></div><div id="left"></div></div>
@@ -373,12 +374,6 @@ function listenWaiting() {
         if (room.status === "playing" && room.gameState) {
             startLocalGame(room.gameState, room.players, room.winCount);
         }
-        // 再戦開始検知（result-overlayが表示中でも新ゲームが始まったら切り替え）
-        if (room.status === "playing" && room.gameState && document.getElementById("result-overlay").style.display === "block") {
-            document.getElementById("result-overlay").style.display = "none";
-            listeningGame = false;
-            startLocalGame(room.gameState, room.players, room.winCount);
-        }
     });
 }
 
@@ -497,11 +492,6 @@ function listenGameState() {
     onValue(ref(db, "rooms/" + roomId + "/gameState"), function(snap) {
         if (!snap.exists()) return;
         var gs = snap.val();
-        // ステータスチェック（同じ部屋で続ける場合）
-        var roomStatus = null;
-        get(ref(db, "rooms/" + roomId + "/status")).then(function(snap){
-            if(snap.exists()) roomStatus = snap.val();
-        });
         loadGameState(gs);
         renderAll();
     });
@@ -550,47 +540,6 @@ function setNotice(t){ document.getElementById("draw-notice").textContent=t; }
 
 function isMyTurn(){ return myIndex===current; }
 
-// 親番で出せるカードがあるか判定（★以外）
-function hasPlayableFirstCard(hand) {
-    for (var i = 0; i < hand.length; i++) {
-        var c = hand[i];
-        if (c === "★") continue; // ★は除外
-        if (c === "e-") continue; // 電子は親で出せない
-        var p = parse(c);
-        if (p.elem === "Fe" && !p.isIon) continue; // Fe単体は親で出せない
-        // H+は2枚必要
-        if (c === "H+") {
-            var cnt = 0;
-            for (var j = 0; j < hand.length; j++) if (hand[j] === "H+") cnt++;
-            if (cnt < 2) continue;
-        }
-        return true;
-    }
-    return false;
-}
-
-// 手札を全部山札に戻して引き直し
-function reshuffleHand(playerIdx) {
-    var hand = players[playerIdx];
-    var count = hand.length;
-    // 手札を山札に戻す
-    deck = deck.concat(hand);
-    players[playerIdx] = [];
-    // シャッフル
-    deck.sort(function(){ return Math.random() - 0.5; });
-    // 元の枚数だけ引く
-    var rejected = [];
-    while (players[playerIdx].length < count && deck.length > 0) {
-        var card = deck.pop();
-        var cnt = 0;
-        for (var k = 0; k < players[playerIdx].length; k++) if (players[playerIdx][k] === card) cnt++;
-        if (card !== "e-" && card !== "★" && cnt >= 2) rejected.push(card);
-        else players[playerIdx].push(card);
-    }
-    deck = deck.concat(rejected);
-    deck.sort(function(){ return Math.random() - 0.5; });
-}
-
 function getWildChoice(){
     return new Promise(function(resolve){
         var modal=document.getElementById("wild-modal");
@@ -606,17 +555,6 @@ function getWildChoice(){
         modal.style.display="flex";
     });
 }
-
-window.reshuffleAndPass = function(){
-    if(!isMyTurn()) return;
-    if(!isFirstTurn) return;
-    if(hasPlayableFirstCard(players[myIndex])){ msg("出せるカードがあります！"); return; }
-    var count = players[myIndex].length;
-    reshuffleHand(myIndex);
-    msg("手札を" + count + "枚交換しました。次のプレイヤーへ。", true);
-    pushState();
-    setTimeout(function(){ nextPlayer(); }, 1500);
-};
 
 window.drawOne = function(){
     if(!isMyTurn()){ msg("あなたのターンではありません"); return; }
@@ -1034,6 +972,7 @@ function clearField(){
     noPlayCount=0; lastPlayerPlayed=null; isFirstTurn=true;
     playedThisTurn=false; drawnThisTurn=false;
     pushState();
+    nextPlayer();
 }
 
 function checkViolation(){
@@ -1160,14 +1099,6 @@ function renderAll(){
             btn.textContent=(side==="left"?"反応物側":"生成物側")+(isFirstTurn?"に出して開始":"に出す");
             btn.onclick=function(){ window.play(side); }; ctrl.appendChild(btn);
         });
-        // 親番で出せるカードがない場合は手札交換ボタンを表示
-        if(isFirstTurn && !hasPlayableFirstCard(players[myIndex])){
-            var reshuffleBtn=document.createElement("button");
-            reshuffleBtn.textContent="🔄 手札交換（出せるカードなし）";
-            reshuffleBtn.style.backgroundColor="#e67e22";
-            reshuffleBtn.onclick=window.reshuffleAndPass;
-            ctrl.appendChild(reshuffleBtn);
-        }
         if(!isFirstTurn){
             if(playedThisTurn){
                 var endBtn=document.createElement("button"); endBtn.textContent="ターン終了";
@@ -1219,51 +1150,8 @@ function showFinal(){
     }
     html+="</table><br>反応完成: "+totalReactions+"回　傾向ミス: "+totalMistakes+"回";
     document.getElementById("result-content").innerHTML=html;
-    // ボタン生成
-    var btnDiv = document.getElementById("result-buttons");
-    btnDiv.innerHTML = "";
-    if(isHost) {
-        var continueBtn = document.createElement("button");
-        continueBtn.textContent = "🔄 同じメンバーで続ける";
-        continueBtn.style.width = "100%";
-        continueBtn.style.marginBottom = "8px";
-        continueBtn.style.background = "#27ae60";
-        continueBtn.onclick = window.continueGame;
-        btnDiv.appendChild(continueBtn);
-    }
-    var reloadBtn = document.createElement("button");
-    reloadBtn.textContent = "🏠 トップへ戻る";
-    reloadBtn.style.width = "100%";
-    reloadBtn.style.background = "#95a5a6";
-    reloadBtn.onclick = function(){ location.reload(); };
-    btnDiv.appendChild(reloadBtn);
-    if(!isHost) {
-        var waitMsg = document.createElement("p");
-        waitMsg.textContent = "ホストが続けるか選択中...";
-        waitMsg.style.color = "#888";
-        waitMsg.style.fontSize = "13px";
-        btnDiv.appendChild(waitMsg);
-    }
     document.getElementById("result-overlay").style.display="block";
 }
-
-window.continueGame = async function(){
-    // 同じプレイヤー・設定で新しいゲームを初期化
-    var newState = buildInitialState(playerNames, winCount);
-    // 状態をリセット
-    listeningGame = false;
-    winners = [];
-    totalReactions = 0; totalMistakes = 0;
-    playerPoints = playerNames.map(function(){return 0;});
-    playerFullReactions = playerNames.map(function(){return 0;});
-    playerHalfReactions = playerNames.map(function(){return 0;});
-    playerElecPoints = playerNames.map(function(){return 0;});
-    document.getElementById("result-overlay").style.display = "none";
-    await update(ref(db, "rooms/" + roomId), {
-        status: "playing",
-        gameState: newState
-    });
-};
 
 window.showForceEndConfirm = function(){ document.getElementById("force-end-modal").style.display="flex"; };
 window.forceEnd = function(){
@@ -1296,7 +1184,7 @@ function setBg(mode) {
     cancelAnimationFrame(bgAnimId);
     bgObjects = [];
     // ボタンのハイライト
-    ['none','space','ocean','sky'].forEach(function(m) {
+    ['none','space','ocean','sky','forest'].forEach(function(m) {
         var btn = document.getElementById('btn-bg-' + m);
         if (btn) btn.style.opacity = (m === mode) ? '1' : '0.5';
     });
@@ -1315,6 +1203,9 @@ function setBg(mode) {
     } else if (mode === 'sky') {
         document.body.style.backgroundColor = '#87ceeb';
         initSky();
+    } else if (mode === 'forest') {
+        document.body.style.backgroundColor = '#1a3a0a';
+        initForest();
     }
     animateBg();
 }
@@ -1556,17 +1447,145 @@ function drawSky() {
     });
 }
 
+// ===== 🌿 森・木漏れ日 =====
+function initForest() {
+    bgObjects = [];
+    // 木漏れ日（光の斑点）
+    for (var i = 0; i < 40; i++) {
+        bgObjects.push({
+            type: 'sunspot',
+            x: Math.random() * bgCanvas.width,
+            y: Math.random() * bgCanvas.height,
+            r: Math.random() * 30 + 10,
+            alpha: Math.random() * 0.15 + 0.03,
+            alphaDir: Math.random() > 0.5 ? 1 : -1,
+            alphaSpeed: Math.random() * 0.003 + 0.001,
+            dx: (Math.random() - 0.5) * 0.3,
+            dy: (Math.random() - 0.5) * 0.15
+        });
+    }
+    // 落ち葉
+    for (var i = 0; i < 25; i++) {
+        bgObjects.push(makeLeaf());
+        bgObjects[bgObjects.length-1].y = Math.random() * bgCanvas.height;
+    }
+    // 光の筋（木漏れ日ビーム）
+    for (var i = 0; i < 8; i++) {
+        bgObjects.push({
+            type: 'beam',
+            x: Math.random() * bgCanvas.width,
+            width: Math.random() * 25 + 8,
+            alpha: Math.random() * 0.06 + 0.02,
+            speed: Math.random() * 0.15 + 0.05,
+            angle: (Math.random() * 0.3 + 0.1)
+        });
+    }
+}
+
+function makeLeaf() {
+    return {
+        type: 'leaf',
+        x: Math.random() * bgCanvas.width,
+        y: -20,
+        size: Math.random() * 10 + 5,
+        speed: Math.random() * 0.6 + 0.2,
+        wobble: Math.random() * 0.04 + 0.01,
+        wobbleT: Math.random() * Math.PI * 2,
+        rot: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.04,
+        color: ['#4a7c2f','#6aaa3a','#8bc34a','#558b2f','#33691e','#9ccc65'][Math.floor(Math.random()*6)]
+    };
+}
+
+function drawForest() {
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+    // 背景グラデ（深い森）
+    var grad = bgCtx.createLinearGradient(0, 0, 0, bgCanvas.height);
+    grad.addColorStop(0, 'rgba(10,40,5,0.7)');
+    grad.addColorStop(0.5, 'rgba(20,60,10,0.5)');
+    grad.addColorStop(1, 'rgba(5,25,3,0.8)');
+    bgCtx.fillStyle = grad;
+    bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+    bgObjects.forEach(function(o) {
+        if (o.type === 'beam') {
+            // 斜めの光の筋
+            bgCtx.save();
+            bgCtx.beginPath();
+            var bx = o.x;
+            bgCtx.moveTo(bx, 0);
+            bgCtx.lineTo(bx - o.width * 0.5 + bgCanvas.height * o.angle, bgCanvas.height);
+            bgCtx.lineTo(bx + o.width * 0.5 + bgCanvas.height * o.angle, bgCanvas.height);
+            bgCtx.closePath();
+            var bgrad = bgCtx.createLinearGradient(0, 0, 0, bgCanvas.height);
+            bgrad.addColorStop(0, 'rgba(200,255,150,' + o.alpha + ')');
+            bgrad.addColorStop(1, 'rgba(200,255,150,0)');
+            bgCtx.fillStyle = bgrad;
+            bgCtx.fill();
+            bgCtx.restore();
+            o.x += o.speed;
+            if (o.x > bgCanvas.width + 100) o.x = -100;
+
+        } else if (o.type === 'sunspot') {
+            // 木漏れ日の光斑
+            o.alpha += o.alphaSpeed * o.alphaDir;
+            if (o.alpha > 0.18 || o.alpha < 0.02) o.alphaDir *= -1;
+            o.x += o.dx; o.y += o.dy;
+            if (o.x < -50) o.x = bgCanvas.width + 50;
+            if (o.x > bgCanvas.width + 50) o.x = -50;
+            if (o.y < -50) o.y = bgCanvas.height + 50;
+            if (o.y > bgCanvas.height + 50) o.y = -50;
+            var sgrad = bgCtx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+            sgrad.addColorStop(0, 'rgba(220,255,180,' + o.alpha + ')');
+            sgrad.addColorStop(1, 'rgba(220,255,180,0)');
+            bgCtx.beginPath();
+            bgCtx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+            bgCtx.fillStyle = sgrad;
+            bgCtx.fill();
+
+        } else if (o.type === 'leaf') {
+            // 落ち葉
+            o.wobbleT += o.wobble;
+            o.x += Math.sin(o.wobbleT) * 1.2;
+            o.y += o.speed;
+            o.rot += o.rotSpeed;
+            bgCtx.save();
+            bgCtx.translate(o.x, o.y);
+            bgCtx.rotate(o.rot);
+            bgCtx.globalAlpha = 0.7;
+            bgCtx.beginPath();
+            bgCtx.ellipse(0, 0, o.size, o.size * 0.5, 0, 0, Math.PI * 2);
+            bgCtx.fillStyle = o.color;
+            bgCtx.fill();
+            // 葉脈
+            bgCtx.beginPath();
+            bgCtx.moveTo(-o.size, 0);
+            bgCtx.lineTo(o.size, 0);
+            bgCtx.strokeStyle = 'rgba(255,255,255,0.2)';
+            bgCtx.lineWidth = 0.5;
+            bgCtx.stroke();
+            bgCtx.restore();
+            if (o.y > bgCanvas.height + 20) {
+                var idx = bgObjects.indexOf(o);
+                bgObjects[idx] = makeLeaf();
+            }
+        }
+    });
+}
+
 // ===== アニメーションループ =====
 function animateBg() {
     if (bgMode === 'space') drawSpace();
     else if (bgMode === 'ocean') drawOcean();
     else if (bgMode === 'sky') drawSky();
+    else if (bgMode === 'forest') drawForest();
     bgAnimId = requestAnimationFrame(animateBg);
 }
 
 // 初期ボタン状態
 document.addEventListener('DOMContentLoaded', function() {
-    ['none','space','ocean','sky'].forEach(function(m) {
+    ['none','space','ocean','sky','forest'].forEach(function(m) {
         var btn = document.getElementById('btn-bg-' + m);
         if (btn) btn.style.opacity = m === 'none' ? '1' : '0.5';
     });
