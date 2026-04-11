@@ -247,6 +247,7 @@ var playerPoints = [], playerFullReactions = [], playerHalfReactions = [], playe
 var handSorted = false, newCardIndex = -1, capVisible = false;
 var cpuSlots = []; // CPUスロット配列 [false, true, ...]
 var cpuThinking = false; // CPU思考中フラグ
+var cpuLock = false; // CPUターン実行中ロック
 
 var ionizationSeries = ["Na","Al","Zn","Fe","H","Cu","Ag"];
 var cardTypes = ["Na","Na+","Al","Al3+","Zn","Zn2+","Cu","Cu2+","Ag","Ag+","Fe","Fe2+","Fe3+","H+","H2","e-"];
@@ -433,7 +434,8 @@ function startLocalGame(gs, pl, wc) {
     // 以降はFirebaseをリッスンして状態を同期
     listenGameState();
     // 最初のターンがCPUの場合
-    if(cpuSlots[current] && isHost) {
+    if(cpuSlots[current] && isHost && !cpuLock) {
+        cpuLock = true;
         setTimeout(doCpuTurn, 1500);
     }
 }
@@ -729,18 +731,17 @@ function nextPlayer(){
     if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
     do{ current=(current+1)%playerNames.length; } while(winners.indexOf(current)!==-1);
     pushState();
-    // CPUのターンなら自動実行（ホストのみ）
-    if(cpuSlots[current] && isHost) {
-        setTimeout(doCpuTurn, 800);
-    } else if(cpuSlots[current] && !isHost) {
-        // 非ホストは何もしない（ホストが制御）
+    // CPUのターンなら自動実行（ホストのみ、ロック中は実行しない）
+    if(cpuSlots[current] && isHost && !cpuLock) {
+        cpuLock = true;
+        setTimeout(function(){ doCpuTurn(); }, 800);
     }
 }
 
 // ===== CPU思考 =====
 function doCpuTurn() {
-    if(!cpuSlots[current]) return;
-    if(winners.indexOf(current)!==-1){ nextPlayer(); return; }
+    if(!cpuSlots[current]){ cpuLock=false; return; }
+    if(winners.indexOf(current)!==-1){ cpuLock=false; nextPlayer(); return; }
 
     var hand = players[current];
     if(!hand || hand.length===0){ nextPlayer(); return; }
@@ -792,6 +793,7 @@ function doCpuTurn() {
         isFirstTurn=false; playedThisTurn=false;
         checkWinner(current);
         pushState();
+        cpuLock=false;
         nextPlayer();
         return;
     }
@@ -814,14 +816,16 @@ function doCpuTurn() {
         checkWinner(current);
         checkComplete();
         // ターン終了チェック
-        if(playedThisTurn && checkViolation()){ triggerPenalty(); return; }
+        if(playedThisTurn && checkViolation()){ cpuLock=false; triggerPenalty(); return; }
         playedThisTurn=false;
+        cpuLock=false;
         pushState();
         nextPlayer();
     } else {
         // 出せないので1枚引いてパス
         if(deck.length>0) hand.push(deck.pop());
         noPlayCount++;
+        cpuLock=false;
         checkFlowCondition();
     }
 }
