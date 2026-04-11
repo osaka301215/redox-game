@@ -1204,7 +1204,7 @@ function setBg(mode) {
         document.body.style.backgroundColor = '#87ceeb';
         initSky();
     } else if (mode === 'forest') {
-        document.body.style.backgroundColor = '#1a3a0a';
+        document.body.style.backgroundColor = '#0a1a05';
         initForest();
     }
     animateBg();
@@ -1447,129 +1447,216 @@ function drawSky() {
     });
 }
 
-// ===== 🌿 森・木漏れ日 =====
+
+// ===== 🌿 森・大木（MTG樫の力イメージ）=====
+var forestTrees = [];
+var forestLeaves = [];
+var forestBeams = [];
+var forestTime = 0;
+
 function initForest() {
     bgObjects = [];
-    // 木漏れ日（光の斑点）
-    for (var i = 0; i < 40; i++) {
+    forestTrees = [];
+    forestLeaves = [];
+    forestBeams = [];
+    forestTime = 0;
+
+    // 大木を数本生成（左右と中央奥）
+    var treeConfigs = [
+        {x: bgCanvas.width * 0.08, trunkH: bgCanvas.height * 0.75, trunkW: 28, depth: 8, spread: 180, color: '#1a0f00'},
+        {x: bgCanvas.width * 0.92, trunkH: bgCanvas.height * 0.72, trunkW: 25, depth: 7, spread: 160, color: '#1a0f00'},
+        {x: bgCanvas.width * 0.22, trunkH: bgCanvas.height * 0.55, trunkW: 16, depth: 6, spread: 120, color: '#130c00'},
+        {x: bgCanvas.width * 0.78, trunkH: bgCanvas.height * 0.52, trunkW: 14, depth: 6, spread: 110, color: '#130c00'},
+        {x: bgCanvas.width * 0.5,  trunkH: bgCanvas.height * 0.35, trunkW: 10, depth: 5, spread: 80,  color: '#0d0800'},
+    ];
+    forestTrees = treeConfigs;
+
+    // 木漏れ日ビーム
+    for (var i = 0; i < 10; i++) {
+        forestBeams.push({
+            x: Math.random() * bgCanvas.width,
+            width: Math.random() * 40 + 15,
+            alpha: Math.random() * 0.07 + 0.02,
+            speed: Math.random() * 0.12 + 0.04,
+            angle: Math.random() * 0.25 + 0.08,
+            length: bgCanvas.height * (Math.random() * 0.5 + 0.7)
+        });
+    }
+
+    // 浮遊する光の粒
+    for (var i = 0; i < 50; i++) {
         bgObjects.push({
-            type: 'sunspot',
+            type: 'mote',
             x: Math.random() * bgCanvas.width,
             y: Math.random() * bgCanvas.height,
-            r: Math.random() * 30 + 10,
-            alpha: Math.random() * 0.15 + 0.03,
+            r: Math.random() * 2.5 + 0.8,
+            alpha: Math.random() * 0.5 + 0.1,
             alphaDir: Math.random() > 0.5 ? 1 : -1,
-            alphaSpeed: Math.random() * 0.003 + 0.001,
-            dx: (Math.random() - 0.5) * 0.3,
-            dy: (Math.random() - 0.5) * 0.15
+            alphaSpeed: Math.random() * 0.008 + 0.002,
+            dx: (Math.random() - 0.5) * 0.4,
+            dy: -(Math.random() * 0.3 + 0.05)
         });
     }
+
     // 落ち葉
-    for (var i = 0; i < 25; i++) {
-        bgObjects.push(makeLeaf());
-        bgObjects[bgObjects.length-1].y = Math.random() * bgCanvas.height;
-    }
-    // 光の筋（木漏れ日ビーム）
-    for (var i = 0; i < 8; i++) {
-        bgObjects.push({
-            type: 'beam',
-            x: Math.random() * bgCanvas.width,
-            width: Math.random() * 25 + 8,
-            alpha: Math.random() * 0.06 + 0.02,
-            speed: Math.random() * 0.15 + 0.05,
-            angle: (Math.random() * 0.3 + 0.1)
-        });
+    for (var i = 0; i < 20; i++) {
+        forestLeaves.push(makeForestLeaf(true));
     }
 }
 
-function makeLeaf() {
+function makeForestLeaf(randomY) {
     return {
-        type: 'leaf',
         x: Math.random() * bgCanvas.width,
-        y: -20,
-        size: Math.random() * 10 + 5,
-        speed: Math.random() * 0.6 + 0.2,
-        wobble: Math.random() * 0.04 + 0.01,
+        y: randomY ? Math.random() * bgCanvas.height : -15,
+        size: Math.random() * 8 + 4,
+        speedY: Math.random() * 0.5 + 0.15,
+        wobble: Math.random() * 0.03 + 0.01,
         wobbleT: Math.random() * Math.PI * 2,
         rot: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() - 0.5) * 0.04,
-        color: ['#4a7c2f','#6aaa3a','#8bc34a','#558b2f','#33691e','#9ccc65'][Math.floor(Math.random()*6)]
+        rotSpeed: (Math.random() - 0.5) * 0.03,
+        color: ['#2d5a1b','#3d7a22','#1a3d0a','#4a8a2a','#558b2f','#1b4d0c'][Math.floor(Math.random()*6)],
+        alpha: Math.random() * 0.5 + 0.4
     };
 }
 
+// 再帰で枝を描く
+function drawBranch(ctx, x, y, angle, length, width, depth, spread, baseColor) {
+    if (depth === 0 || length < 3) return;
+
+    var ex = x + Math.cos(angle) * length;
+    var ey = y + Math.sin(angle) * length;
+
+    // 幹・枝のグラデ
+    var grad = ctx.createLinearGradient(x, y, ex, ey);
+    var c1 = depth > 4 ? '#2a1800' : '#1a0e00';
+    var c2 = depth > 4 ? '#1a0e00' : '#0f0800';
+    grad.addColorStop(0, c1);
+    grad.addColorStop(1, c2);
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // 枝先に葉の塊
+    if (depth <= 2) {
+        var leafR = length * 1.8;
+        var lgrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, leafR);
+        lgrad.addColorStop(0, 'rgba(30,80,10,0.55)');
+        lgrad.addColorStop(0.5,'rgba(20,60,5,0.35)');
+        lgrad.addColorStop(1, 'rgba(10,40,0,0)');
+        ctx.beginPath();
+        ctx.arc(ex, ey, leafR, 0, Math.PI*2);
+        ctx.fillStyle = lgrad;
+        ctx.fill();
+    }
+
+    // 揺れアニメ
+    var sway = Math.sin(forestTime * 0.0008 + depth) * 0.04 * (6 - depth);
+
+    // 再帰で子枝
+    var branches = depth > 3 ? 3 : 2;
+    var spreadRad = (spread * Math.PI / 180);
+    for (var i = 0; i < branches; i++) {
+        var t = branches === 1 ? 0 : (i / (branches - 1) - 0.5);
+        var childAngle = angle + t * spreadRad * 0.6 + sway;
+        var childLen = length * (Math.random() * 0.15 + 0.65);
+        var childW = Math.max(0.8, width * 0.65);
+        drawBranch(ctx, ex, ey, childAngle, childLen, childW, depth - 1, spread * 0.85, baseColor);
+    }
+}
+
 function drawForest() {
+    forestTime++;
     bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
 
-    // 背景グラデ（深い森）
-    var grad = bgCtx.createLinearGradient(0, 0, 0, bgCanvas.height);
-    grad.addColorStop(0, 'rgba(10,40,5,0.7)');
-    grad.addColorStop(0.5, 'rgba(20,60,10,0.5)');
-    grad.addColorStop(1, 'rgba(5,25,3,0.8)');
-    bgCtx.fillStyle = grad;
+    // 背景グラデ（霧がかった深森）
+    var bgGrad = bgCtx.createLinearGradient(0, 0, 0, bgCanvas.height);
+    bgGrad.addColorStop(0,   'rgba(5,15,2,0.95)');
+    bgGrad.addColorStop(0.4, 'rgba(10,30,5,0.85)');
+    bgGrad.addColorStop(1,   'rgba(3,10,1,0.98)');
+    bgCtx.fillStyle = bgGrad;
     bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
 
+    // 光のビーム（木漏れ日）
+    forestBeams.forEach(function(b) {
+        bgCtx.save();
+        bgCtx.beginPath();
+        bgCtx.moveTo(b.x, 0);
+        bgCtx.lineTo(b.x + b.length * b.angle, b.length);
+        bgCtx.lineTo(b.x + b.width + b.length * b.angle, b.length);
+        bgCtx.lineTo(b.x + b.width, 0);
+        bgCtx.closePath();
+        var bgrad = bgCtx.createLinearGradient(0, 0, 0, b.length);
+        bgrad.addColorStop(0, 'rgba(180,255,120,' + b.alpha + ')');
+        bgrad.addColorStop(1, 'rgba(180,255,120,0)');
+        bgCtx.fillStyle = bgrad;
+        bgCtx.fill();
+        bgCtx.restore();
+        b.x += b.speed;
+        if (b.x > bgCanvas.width + 150) b.x = -150;
+    });
+
+    // 木を描画（奥から手前の順）
+    forestTrees.forEach(function(t) {
+        var rootY = bgCanvas.height;
+        var trunkAngle = -Math.PI / 2 + Math.sin(forestTime * 0.0006) * 0.012;
+        bgCtx.save();
+        drawBranch(bgCtx, t.x, rootY, trunkAngle, t.trunkH, t.trunkW, t.depth, t.spread, t.color);
+        bgCtx.restore();
+    });
+
+    // 霧（地面付近）
+    var fogGrad = bgCtx.createLinearGradient(0, bgCanvas.height * 0.6, 0, bgCanvas.height);
+    fogGrad.addColorStop(0, 'rgba(20,50,10,0)');
+    fogGrad.addColorStop(1, 'rgba(20,50,10,0.45)');
+    bgCtx.fillStyle = fogGrad;
+    bgCtx.fillRect(0, bgCanvas.height * 0.6, bgCanvas.width, bgCanvas.height * 0.4);
+
+    // 浮遊する光の粒
     bgObjects.forEach(function(o) {
-        if (o.type === 'beam') {
-            // 斜めの光の筋
-            bgCtx.save();
-            bgCtx.beginPath();
-            var bx = o.x;
-            bgCtx.moveTo(bx, 0);
-            bgCtx.lineTo(bx - o.width * 0.5 + bgCanvas.height * o.angle, bgCanvas.height);
-            bgCtx.lineTo(bx + o.width * 0.5 + bgCanvas.height * o.angle, bgCanvas.height);
-            bgCtx.closePath();
-            var bgrad = bgCtx.createLinearGradient(0, 0, 0, bgCanvas.height);
-            bgrad.addColorStop(0, 'rgba(200,255,150,' + o.alpha + ')');
-            bgrad.addColorStop(1, 'rgba(200,255,150,0)');
-            bgCtx.fillStyle = bgrad;
-            bgCtx.fill();
-            bgCtx.restore();
-            o.x += o.speed;
-            if (o.x > bgCanvas.width + 100) o.x = -100;
+        if (o.type !== 'mote') return;
+        o.alpha += o.alphaSpeed * o.alphaDir;
+        if (o.alpha > 0.65 || o.alpha < 0.05) o.alphaDir *= -1;
+        o.x += o.dx; o.y += o.dy;
+        if (o.y < -10) { o.y = bgCanvas.height + 10; o.x = Math.random() * bgCanvas.width; }
+        if (o.x < -10) o.x = bgCanvas.width + 10;
+        if (o.x > bgCanvas.width + 10) o.x = -10;
+        var mg = bgCtx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r * 2);
+        mg.addColorStop(0, 'rgba(200,255,150,' + o.alpha + ')');
+        mg.addColorStop(1, 'rgba(200,255,150,0)');
+        bgCtx.beginPath();
+        bgCtx.arc(o.x, o.y, o.r * 2, 0, Math.PI*2);
+        bgCtx.fillStyle = mg;
+        bgCtx.fill();
+    });
 
-        } else if (o.type === 'sunspot') {
-            // 木漏れ日の光斑
-            o.alpha += o.alphaSpeed * o.alphaDir;
-            if (o.alpha > 0.18 || o.alpha < 0.02) o.alphaDir *= -1;
-            o.x += o.dx; o.y += o.dy;
-            if (o.x < -50) o.x = bgCanvas.width + 50;
-            if (o.x > bgCanvas.width + 50) o.x = -50;
-            if (o.y < -50) o.y = bgCanvas.height + 50;
-            if (o.y > bgCanvas.height + 50) o.y = -50;
-            var sgrad = bgCtx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
-            sgrad.addColorStop(0, 'rgba(220,255,180,' + o.alpha + ')');
-            sgrad.addColorStop(1, 'rgba(220,255,180,0)');
-            bgCtx.beginPath();
-            bgCtx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
-            bgCtx.fillStyle = sgrad;
-            bgCtx.fill();
-
-        } else if (o.type === 'leaf') {
-            // 落ち葉
-            o.wobbleT += o.wobble;
-            o.x += Math.sin(o.wobbleT) * 1.2;
-            o.y += o.speed;
-            o.rot += o.rotSpeed;
-            bgCtx.save();
-            bgCtx.translate(o.x, o.y);
-            bgCtx.rotate(o.rot);
-            bgCtx.globalAlpha = 0.7;
-            bgCtx.beginPath();
-            bgCtx.ellipse(0, 0, o.size, o.size * 0.5, 0, 0, Math.PI * 2);
-            bgCtx.fillStyle = o.color;
-            bgCtx.fill();
-            // 葉脈
-            bgCtx.beginPath();
-            bgCtx.moveTo(-o.size, 0);
-            bgCtx.lineTo(o.size, 0);
-            bgCtx.strokeStyle = 'rgba(255,255,255,0.2)';
-            bgCtx.lineWidth = 0.5;
-            bgCtx.stroke();
-            bgCtx.restore();
-            if (o.y > bgCanvas.height + 20) {
-                var idx = bgObjects.indexOf(o);
-                bgObjects[idx] = makeLeaf();
-            }
+    // 落ち葉
+    forestLeaves.forEach(function(l, idx) {
+        l.wobbleT += l.wobble;
+        l.x += Math.sin(l.wobbleT) * 1.0;
+        l.y += l.speedY;
+        l.rot += l.rotSpeed;
+        bgCtx.save();
+        bgCtx.globalAlpha = l.alpha;
+        bgCtx.translate(l.x, l.y);
+        bgCtx.rotate(l.rot);
+        bgCtx.beginPath();
+        bgCtx.ellipse(0, 0, l.size, l.size * 0.45, 0, 0, Math.PI*2);
+        bgCtx.fillStyle = l.color;
+        bgCtx.fill();
+        bgCtx.beginPath();
+        bgCtx.moveTo(-l.size*0.9, 0);
+        bgCtx.lineTo(l.size*0.9, 0);
+        bgCtx.strokeStyle = 'rgba(255,255,255,0.15)';
+        bgCtx.lineWidth = 0.6;
+        bgCtx.stroke();
+        bgCtx.restore();
+        if (l.y > bgCanvas.height + 20) {
+            forestLeaves[idx] = makeForestLeaf(false);
         }
     });
 }
