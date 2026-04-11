@@ -432,6 +432,10 @@ function startLocalGame(gs, pl, wc) {
     document.getElementById("game-area").style.display = "block";
     // 以降はFirebaseをリッスンして状態を同期
     listenGameState();
+    // 最初のターンがCPUの場合
+    if(cpuSlots[current] && isHost) {
+        setTimeout(doCpuTurn, 1500);
+    }
 }
 
 function loadGameState(gs) {
@@ -487,11 +491,6 @@ function listenGameState() {
         var gs = snap.val();
         loadGameState(gs);
         renderAll();
-        // ホストがCPUターンを制御
-        if(isHost && cpuSlots[current] && winners.indexOf(current)===-1 && !cpuThinking){
-            cpuThinking=true;
-            setTimeout(function(){ cpuThinking=false; doCpuTurn(); }, 1200);
-        }
     });
 }
 
@@ -730,9 +729,11 @@ function nextPlayer(){
     if(winners.length>=playerNames.length-1&&playerNames.length>0){ showFinal(); return; }
     do{ current=(current+1)%playerNames.length; } while(winners.indexOf(current)!==-1);
     pushState();
-    // CPUのターンなら自動実行
+    // CPUのターンなら自動実行（ホストのみ）
     if(cpuSlots[current] && isHost) {
-        setTimeout(doCpuTurn, 1200);
+        setTimeout(doCpuTurn, 800);
+    } else if(cpuSlots[current] && !isHost) {
+        // 非ホストは何もしない（ホストが制御）
     }
 }
 
