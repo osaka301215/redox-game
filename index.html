@@ -254,7 +254,8 @@ var totalReactions = 0, totalMistakes = 0, winners = [];
 var parentElement = "", reactionCap = 0, drawnThisTurn = false;
 var playerPoints = [], playerFullReactions = [], playerHalfReactions = [], playerElecPoints = [];
 var handSorted = false, newCardIndex = -1, capVisible = false;
-var cpuSlots = []; // CPUスロット配列 [false, true, ...]
+var cpuSlots = []; // CPUスロット配列
+var reactionNotify = null; // 反応成立通知 {text, pt} or null [false, true, ...]
 var playedThisTurnCards = []; // このターンに出したカード {side, card} のリスト
 var cpuThinking = false; // CPU思考中フラグ
 var cpuLock = false; // CPUターン実行中ロック
@@ -472,6 +473,7 @@ function loadGameState(gs) {
     playerHalfReactions = gs.playerHalfReactions || playerNames.map(function(){return 0;});
     playerElecPoints = gs.playerElecPoints || playerNames.map(function(){return 0;});
     winCount = gs.winCount || winCount;
+    reactionNotify = gs.reactionNotify || null;
 }
 
 function getGameState() {
@@ -485,7 +487,8 @@ function getGameState() {
         totalMistakes: totalMistakes, winners: winners,
         playerPoints: playerPoints, playerFullReactions: playerFullReactions,
         playerHalfReactions: playerHalfReactions, playerElecPoints: playerElecPoints,
-        winCount: winCount, log: ""
+        winCount: winCount, log: "",
+        reactionNotify: reactionNotify
     };
 }
 
@@ -515,7 +518,12 @@ function listenGameState() {
             }
             return;
         }
+        var prevNotify = reactionNotify;
         loadGameState(gs);
+        // 反応成立通知を全員に表示（自分がホストでない場合も）
+        if (reactionNotify && (!prevNotify || JSON.stringify(prevNotify) !== JSON.stringify(reactionNotify))) {
+            showReactionOverlay(reactionNotify);
+        }
         // 全員分の結果が出ていたら全プレイヤーにresultを表示
         if (winners.length >= playerNames.length - 1 && playerNames.length > 0) {
             if (document.getElementById("result-overlay").style.display !== "block") {
@@ -1011,6 +1019,15 @@ function findCpuPlay(){
     return null;
 }
 
+function showReactionOverlay(notify) {
+    if (!notify) return;
+    var ro = document.getElementById("reaction-overlay");
+    document.getElementById("reaction-overlay-text").innerHTML =
+        "🎉 反応成立！<br>+" + notify.pt + "pt<br><span style='font-size:18px;'>" + notify.name + "</span>";
+    ro.style.display = "block";
+    setTimeout(function(){ ro.style.display = "none"; reactionNotify = null; }, 3000);
+}
+
 function clearField(){
     fieldLeft=[]; fieldRight=[]; reactionCap=0; parentElement="";
     msg(""); setNotice("");
@@ -1058,13 +1075,11 @@ function checkComplete(){
             else playerHalfReactions[lastPlayerPlayed]++;
             playerElecPoints[lastPlayerPlayed]+=elecPoint;
             msg("🎉 反応成立！ +"+gainedPoint+"pt ("+(elemCount>=2?"反応式":"半反応式")+" "+basePoint+"pt + 電子"+elecPoint+"pt)",true);
-            var ro=document.getElementById("reaction-overlay");
-            document.getElementById("reaction-overlay-text").innerHTML="🎉 反応成立！<br>+"+gainedPoint+"pt";
-            ro.style.display="block";
-            setTimeout(function(){ro.style.display="none";},2000);
+            reactionNotify = {name: playerNames[lastPlayerPlayed], pt: gainedPoint};
+            showReactionOverlay(reactionNotify);
         }
         totalReactions++;
-        setTimeout(clearField,2500);
+        setTimeout(clearField,3500);
     }
 }
 
