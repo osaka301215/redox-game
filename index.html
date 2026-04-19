@@ -518,10 +518,10 @@ function listenGameState() {
             }
             return;
         }
-        var prevNotify = reactionNotify;
+        var prevNotifyId = reactionNotify ? reactionNotify.id : null;
         loadGameState(gs);
-        // 反応成立通知を全員に表示（自分がホストでない場合も）
-        if (reactionNotify && (!prevNotify || JSON.stringify(prevNotify) !== JSON.stringify(reactionNotify))) {
+        // 反応成立通知を全員に表示（idが変わったときだけ表示）
+        if (reactionNotify && reactionNotify.id !== prevNotifyId) {
             showReactionOverlay(reactionNotify);
         }
         // 全員分の結果が出ていたら全プレイヤーにresultを表示
@@ -1028,12 +1028,14 @@ function showReactionOverlay(notify) {
     setTimeout(function(){ ro.style.display = "none"; reactionNotify = null; }, 3000);
 }
 
-function clearField(){
+async function clearField(){
     fieldLeft=[]; fieldRight=[]; reactionCap=0; parentElement="";
     msg(""); setNotice("");
     noPlayCount=0; lastPlayerPlayed=null; isFirstTurn=true;
     playedThisTurn=false; drawnThisTurn=false;
-    pushState();
+    // reactionNotifyはpushState後にnullにする（全員が受信できるよう少し残す）
+    await pushState();
+    reactionNotify=null;
     nextPlayer();
 }
 
@@ -1075,7 +1077,7 @@ function checkComplete(){
             else playerHalfReactions[lastPlayerPlayed]++;
             playerElecPoints[lastPlayerPlayed]+=elecPoint;
             msg("🎉 反応成立！ +"+gainedPoint+"pt ("+(elemCount>=2?"反応式":"半反応式")+" "+basePoint+"pt + 電子"+elecPoint+"pt)",true);
-            reactionNotify = {name: playerNames[lastPlayerPlayed], pt: gainedPoint};
+            reactionNotify = {name: playerNames[lastPlayerPlayed], pt: gainedPoint, id: Date.now()};
             showReactionOverlay(reactionNotify);
         }
         totalReactions++;
@@ -1201,14 +1203,16 @@ function showFinal(){
     var totalPt=0; for(var i=0;i<playerPoints.length;i++) totalPt+=playerPoints[i];
     html+="<br>💰 <b>獲得ポイント合計："+totalPt+"pt</b><br>";
     html+="<br><b>📊 ポイント内訳</b><br>";
-    html+="<table style='margin:8px auto; border-collapse:collapse; font-size:14px;'>";
-    html+="<tr style='background:#eee'><th style='padding:4px 8px;'>名前</th><th style='padding:4px 8px;'>合計</th><th style='padding:4px 8px;'>反応式</th><th style='padding:4px 8px;'>半反応式</th><th style='padding:4px 8px;'>電子pt</th></tr>";
+    html+="<table style='margin:8px auto; border-collapse:collapse; font-size:14px; width:100%;'>";
+    html+="<tr style='background:#2c3e50; color:#fff;'><th style='padding:7px 10px; border:1px solid #1a252f;'>名前</th><th style='padding:7px 10px; border:1px solid #1a252f;'>合計</th><th style='padding:7px 10px; border:1px solid #1a252f;'>反応式</th><th style='padding:7px 10px; border:1px solid #1a252f;'>半反応式</th><th style='padding:7px 10px; border:1px solid #1a252f;'>電子pt</th></tr>";
     for(var i=0;i<playerNames.length;i++){
-        html+="<tr><td style='padding:4px 8px;'>"+playerNames[i]+"</td>";
-        html+="<td style='padding:4px 8px; font-weight:bold;'>"+playerPoints[i]+"pt</td>";
-        html+="<td style='padding:4px 8px;'>"+playerFullReactions[i]+"回</td>";
-        html+="<td style='padding:4px 8px;'>"+playerHalfReactions[i]+"回</td>";
-        html+="<td style='padding:4px 8px;'>"+playerElecPoints[i]+"pt</td></tr>";
+        var rowBg=(i%2===0)?"#f0f4f8":"#ffffff";
+        html+="<tr style='background:"+rowBg+"; color:#222;'>";
+        html+="<td style='padding:7px 10px; border:1px solid #ccc; font-weight:bold;'>"+playerNames[i]+"</td>";
+        html+="<td style='padding:7px 10px; border:1px solid #ccc; font-weight:bold; color:#e67e22;'>"+playerPoints[i]+"pt</td>";
+        html+="<td style='padding:7px 10px; border:1px solid #ccc;'>"+playerFullReactions[i]+"回</td>";
+        html+="<td style='padding:7px 10px; border:1px solid #ccc;'>"+playerHalfReactions[i]+"回</td>";
+        html+="<td style='padding:7px 10px; border:1px solid #ccc;'>"+playerElecPoints[i]+"pt</td></tr>";
     }
     html+="</table><br>反応完成: "+totalReactions+"回　傾向ミス: "+totalMistakes+"回";
     document.getElementById("result-content").innerHTML=html;
